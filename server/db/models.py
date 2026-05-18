@@ -115,3 +115,32 @@ class StudySession(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     user = relationship("User", back_populates="study_sessions")
+
+
+class SharedItem(Base):
+    __tablename__ = "shared_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String(200), nullable=False)
+    content = Column(Text, nullable=False)
+    item_type = Column(String(50), nullable=False)
+    subject = Column(String(100))
+    likes = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+
+    user = relationship("User")
+    comments = relationship("Comment", back_populates="shared_item", cascade="all, delete-orphan")
+
+
+class Comment(Base):
+    __tablename__ = "comments"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    shared_item_id = Column(Integer, ForeignKey("shared_items.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+    user = relationship("User")
+    shared_item = relationship("SharedItem", back_populates="comments")

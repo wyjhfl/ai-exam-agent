@@ -10,6 +10,7 @@ import PlanPage from "@/pages/PlanPage";
 import AnalysisPage from "@/pages/AnalysisPage";
 import FocusPage from "@/pages/FocusPage";
 import MaterialsPage from "@/pages/MaterialsPage";
+import CommunityPage from "@/pages/CommunityPage";
 import { useUserStore } from "@/stores/userStore";
 import { useChatStore } from "@/stores/chatStore";
 import LoginForm from "@/components/LoginForm";
@@ -54,6 +55,7 @@ function App() {
                 <Route path="/plan" element={<PlanPage />} />
                 <Route path="/analysis" element={<AnalysisPage />} />
                 <Route path="/focus" element={<FocusPage />} />
+                <Route path="/community" element={<CommunityPage />} />
               </Routes>
             </main>
           </>

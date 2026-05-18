@@ -2,7 +2,7 @@
 
 AI 驱动的考研备考桌面应用，基于 Tauri 2.0 + React + Python FastAPI 构建，支持政治/英语/数学三科备考。
 
-**当前版本：v0.2.0**
+**当前版本：v0.3.0**
 
 ## 功能概览
 
@@ -20,6 +20,10 @@ AI 驱动的考研备考桌面应用，基于 Tauri 2.0 + React + Python FastAPI
 | 数据导出 | 错题本和学习总结导出 Excel |
 | 番茄专注 | 番茄钟计时器，今日专注统计 |
 | 应用更新 | 启动时自动检查更新，Sidebar 手动检查 |
+| 文件上传 | 上传 PDF/DOCX/TXT 教辅资料，自动提取文本并分块索引 |
+| AI 学习指导 | 基于上传资料生成学习计划、讲解知识点、解答题目 |
+| 云端同步 | 多设备数据同步（上传/下载/全量合并），登录自动同步 |
+| 社区论坛 | 分享错题和备考经验，帖子点赞、评论、筛选 |
 
 ## 技术栈
 
@@ -46,15 +50,17 @@ ai-exam-agent/
 │   ├── components/
 │   │   ├── layout/         # Sidebar + LoginForm
 │   │   └── ui/             # shadcn/ui 组件
-│   ├── pages/              # 7 个页面
+│   ├── pages/              # 9 个页面
 │   │   ├── HomePage        # 首页仪表盘
 │   │   ├── ChatPage        # AI 对话
 │   │   ├── QuizPage        # 刷题训练
 │   │   ├── PlanPage        # 备考规划
 │   │   ├── AnalysisPage    # 学情分析
 │   │   ├── WritingPage     # 作文批改
-│   │   └── FocusPage       # 番茄专注
-│   ├── stores/             # Zustand (chatStore, userStore, appStore)
+│   │   ├── FocusPage       # 番茄专注
+│   │   ├── MaterialsPage   # 资料管理
+│   │   └── CommunityPage   # 社区论坛
+│   ├── stores/             # Zustand (chatStore, userStore, appStore, syncStore)
 │   ├── services/           # API 调用层 (axios + 拦截器)
 │   └── lib/                # 工具库
 ├── server/                 # Python FastAPI 后端
@@ -68,6 +74,10 @@ ai-exam-agent/
 │   │   ├── user.py         # 用户注册/登录
 │   │   ├── focus.py        # 番茄专注
 │   │   ├── export.py       # 数据导出 (Excel)
+│   │   ├── uploads.py      # 文件上传管理
+│   │   ├── guidance.py     # AI 学习指导
+│   │   ├── sync.py         # 云端数据同步
+│   │   ├── community.py    # 社区论坛
 │   │   └── exception_handler.py  # 统一异常处理
 │   ├── core/               # AI 核心逻辑
 │   │   ├── llm.py          # LLM 调用封装
@@ -75,7 +85,9 @@ ai-exam-agent/
 │   │   ├── planner/        # 智能规划引擎
 │   │   ├── quiz/           # 题目引擎 (AI 出题)
 │   │   ├── writing_evaluator.py  # 作文批改引擎
-│   │   └── spaced_repetition.py  # SM-2 间隔重复
+│   │   ├── spaced_repetition.py  # SM-2 间隔重复
+│   │   ├── document_processor.py # 文档解析 (PDF/DOCX/TXT)
+│   │   └── study_guide.py  # AI 学习指导引擎
 │   ├── db/                 # 数据库层
 │   │   ├── database.py     # 异步引擎 + 会话
 │   │   └── models.py       # SQLAlchemy 模型
@@ -194,6 +206,24 @@ python scripts/seed_quiz.py
 | GET | `/api/focus/today/{user_id}` | 今日专注统计 |
 | GET | `/api/export/{user_id}/wrong-questions/excel` | 导出错题本 Excel |
 | GET | `/api/export/{user_id}/study-summary/excel` | 导出学习总结 Excel |
+| POST | `/api/uploads/upload` | 上传教辅资料 |
+| GET | `/api/uploads/{user_id}` | 获取上传列表 |
+| DELETE | `/api/uploads/{user_id}/{file_id}` | 删除上传文件 |
+| POST | `/api/uploads/{user_id}/{file_id}/reindex` | 重新索引文件 |
+| POST | `/api/guidance/study-plan` | AI 生成学习计划 |
+| POST | `/api/guidance/explain` | AI 讲解知识点 |
+| POST | `/api/guidance/solve` | AI 解答题目 |
+| POST | `/api/sync/upload` | 上传数据到云端 |
+| POST | `/api/sync/download` | 从云端下载数据 |
+| POST | `/api/sync/full` | 全量同步 |
+| GET | `/api/sync/status/{user_id}` | 同步状态 |
+| POST | `/api/community/share` | 分享内容到社区 |
+| GET | `/api/community/posts` | 获取社区帖子列表 |
+| GET | `/api/community/posts/{id}` | 获取帖子详情 |
+| POST | `/api/community/posts/{id}/like` | 点赞 |
+| POST | `/api/community/posts/{id}/comment` | 评论 |
+| GET | `/api/community/posts/{id}/comments` | 获取评论列表 |
+| POST | `/api/community/share-wrong/{wrong_id}` | 一键分享错题 |
 
 ## 数据库
 
@@ -206,8 +236,27 @@ SQLite 本地数据库，包含以下表：
 - `quiz_records` — 答题记录
 - `wrong_questions` — 错题本（含 SM-2 间隔重复字段）
 - `study_sessions` — 学习记录
+- `user_uploads` — 用户上传文件
+- `shared_items` — 社区分享内容
+- `comments` — 社区评论
 
 ## 更新日志
+
+### v0.3.0
+
+- 新增云端数据同步（上传/下载/全量合并，按 updated_at 时间戳合并策略）
+- 新增社区论坛（分享错题和备考经验，帖子 CRUD + 点赞 + 评论 + 筛选分页）
+- 新增文件上传管理（PDF/DOCX/TXT 上传、自动文本提取分块、ChromaDB 索引）
+- 新增 AI 学习指导（基于上传资料生成学习计划、讲解知识点、解答题目）
+- 新增资料管理页面（MaterialsPage，上传/删除/重新索引教辅资料）
+- 新增社区页面（CommunityPage，发帖/浏览/评论/点赞）
+- 新增同步状态管理（syncStore，登录自动同步 + Sidebar 同步状态显示）
+- 新增错题本"分享到社区"一键分享功能
+- RAG 引擎支持按用户检索（search_with_user）和文档删除（remove_document）
+- ChatPage 新增"讲解知识点"和"解答题目"快捷按钮
+- PlanPage 新增"基于教辅生成计划"选项
+- Sidebar 新增社区导航项和同步状态区域
+- 版本号统一更新至 0.3.0
 
 ### v0.2.0
 

@@ -235,7 +235,7 @@ export function getExportUrl(userId: number, type: "wrong-questions" | "study-su
   return `${baseURL}/api/export/${userId}/${type}`;
 }
 
-export const APP_VERSION = "0.2.0";
+export const APP_VERSION = "0.3.0";
 
 export async function uploadFile(userId: number, subject: string, fileType: string, file: File, onProgress?: (pct: number) => void) {
   const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -295,6 +295,59 @@ export async function solveQuestion(userId: number, questionText: string) {
 
 export async function checkForUpdate(): Promise<{ hasUpdate: boolean; currentVersion: string; message: string }> {
   return { hasUpdate: false, currentVersion: APP_VERSION, message: `当前已是最新版本 v${APP_VERSION}` };
+}
+
+export async function syncUpload(userId: number, dataType: string, data: Record<string, any>[]) {
+  const { data: result } = await api.post("/api/sync/upload", { user_id: userId, data_type: dataType, data });
+  return result;
+}
+
+export async function syncDownload(userId: number, dataType: string = "all") {
+  const { data } = await api.post("/api/sync/download", { user_id: userId, data_type: dataType });
+  return data;
+}
+
+export async function syncFull(userId: number, localData: Record<string, any[]>) {
+  const { data } = await api.post("/api/sync/full", { user_id: userId, local_data: localData });
+  return data;
+}
+
+export async function fetchSyncStatus(userId: number) {
+  const { data } = await api.get(`/api/sync/status/${userId}`);
+  return data;
+}
+
+export async function communityShare(userId: number, title: string, content: string, itemType: string, subject: string) {
+  const { data } = await api.post("/api/community/share", { user_id: userId, title, content, item_type: itemType, subject });
+  return data;
+}
+
+export async function fetchCommunityPosts(subject?: string, type?: string, page: number = 1, limit: number = 20) {
+  const params: Record<string, string> = { page: String(page), limit: String(limit) };
+  if (subject) params.subject = subject;
+  if (type) params.type = type;
+  const { data } = await api.get("/api/community/posts", { params });
+  return data;
+}
+
+export async function fetchCommunityPost(postId: number) {
+  const { data } = await api.get(`/api/community/posts/${postId}`);
+  return data;
+}
+
+export async function likeCommunityPost(postId: number) {
+  const { data } = await api.post(`/api/community/posts/${postId}/like`);
+  return data;
+}
+
+export async function commentCommunityPost(postId: number, userId: number, content: string) {
+  const { data } = await api.post(`/api/community/posts/${postId}/comment`, { user_id: userId, content });
+  return data;
+}
+
+export async function shareWrongToCommunity(wrongId: number) {
+  const { data } = await api.post(`/api/community/share-wrong/${wrongId}`);
+  return data;
 }
 
 export default api;

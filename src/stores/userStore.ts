@@ -21,6 +21,9 @@ export const useUserStore = create<UserState>((set) => ({
     localStorage.setItem("ai_exam_user_id", String(data.user_id));
     localStorage.setItem("ai_exam_username", data.username);
     set({ userId: data.user_id, username: data.username, isLoggedIn: true });
+    import("@/stores/syncStore").then(({ useSyncStore }) => {
+      useSyncStore.getState().syncNow(data.user_id);
+    });
   },
 
   register: async (username: string, password: string) => {

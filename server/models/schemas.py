@@ -71,3 +71,32 @@ class GuidanceExplainRequest(BaseModel):
 class GuidanceSolveRequest(BaseModel):
     user_id: int
     question_text: str
+
+
+class SyncUploadRequest(BaseModel):
+    user_id: int
+    data_type: str
+    data: list[dict]
+
+
+class SyncDownloadRequest(BaseModel):
+    user_id: int
+    data_type: str = "all"
+
+
+class SyncFullRequest(BaseModel):
+    user_id: int
+    local_data: dict[str, list[dict]]
+
+
+class CommunityShareRequest(BaseModel):
+    user_id: int
+    title: str
+    content: str
+    item_type: str
+    subject: str = ""
+
+
+class CommunityCommentRequest(BaseModel):
+    user_id: int
+    content: str

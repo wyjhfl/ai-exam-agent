@@ -1,7 +1,8 @@
 import { NavLink } from "react-router-dom";
-import { Home, MessageSquare, BookMarked, BookOpen, BarChart3, PenLine, Timer, Sun, Moon, Monitor, PanelLeftClose, PanelLeft, User, LogOut, RefreshCw, FolderOpen } from "lucide-react";
+import { Home, MessageSquare, BookMarked, BookOpen, BarChart3, PenLine, Timer, Sun, Moon, Monitor, PanelLeftClose, PanelLeft, User, LogOut, RefreshCw, FolderOpen, Users } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { useUserStore } from "@/stores/userStore";
+import { useSyncStore } from "@/stores/syncStore";
 import { APP_VERSION, checkForUpdate } from "@/services/api";
 import { toast } from "sonner";
 import { useState } from "react";
@@ -14,13 +15,28 @@ const navItems = [
   { to: "/writing", icon: PenLine, label: "作文" },
   { to: "/plan", icon: BookOpen, label: "规划" },
   { to: "/analysis", icon: BarChart3, label: "分析" },
+  { to: "/community", icon: Users, label: "社区" },
   { to: "/focus", icon: Timer, label: "专注" },
 ];
 
 function Sidebar() {
   const { theme, setTheme, sidebarCollapsed, toggleSidebar } = useAppStore();
-  const { username, logout } = useUserStore();
+  const { username, logout, userId } = useUserStore();
+  const { lastSyncTime, isSyncing, syncNow } = useSyncStore();
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+
+  const handleSync = () => {
+    if (userId) syncNow(userId);
+  };
+
+  const formatSyncTime = (ts: number | null) => {
+    if (!ts) return "未同步";
+    const diff = Math.floor((Date.now() - ts) / 1000);
+    if (diff < 60) return "刚刚同步";
+    if (diff < 3600) return `${Math.floor(diff / 60)}分钟前同步`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}小时前同步`;
+    return `${Math.floor(diff / 86400)}天前同步`;
+  };
 
   const handleCheckUpdate = async () => {
     setCheckingUpdate(true);
@@ -107,6 +123,22 @@ function Sidebar() {
               <opt.icon className="h-4 w-4" />
             </button>
           ))}
+        </div>
+
+        <div className={`flex ${sidebarCollapsed ? "flex-col items-center" : "items-center justify-between"} text-xs text-muted-foreground`}>
+          {sidebarCollapsed ? (
+            <button onClick={handleSync} disabled={isSyncing} className="p-1 rounded hover:bg-accent" title={formatSyncTime(lastSyncTime)}>
+              <RefreshCw className={`h-3 w-3 ${isSyncing ? "animate-spin" : ""}`} />
+            </button>
+          ) : (
+            <>
+              <span className="text-xs">{formatSyncTime(lastSyncTime)}</span>
+              <button onClick={handleSync} disabled={isSyncing} className="flex items-center gap-1 p-1 rounded hover:bg-accent">
+                <RefreshCw className={`h-3 w-3 ${isSyncing ? "animate-spin" : ""}`} />
+                <span>同步</span>
+              </button>
+            </>
+          )}
         </div>
 
         <div className={`flex ${sidebarCollapsed ? "flex-col items-center" : "items-center justify-between"} text-xs text-muted-foreground`}>

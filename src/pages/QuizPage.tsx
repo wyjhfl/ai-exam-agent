@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { CheckCircle, XCircle, BookOpen, Brain, Sparkles, Loader2, Download } from "lucide-react";
-import { fetchQuestions, submitAnswer, fetchWrongQuestions, markWrongMastered, fetchReviewQuestions, submitReviewAnswer, generateQuizQuestions, fetchMoreQuestions, getExportUrl } from "@/services/api";
+import { CheckCircle, XCircle, BookOpen, Brain, Sparkles, Loader2, Download, Share2 } from "lucide-react";
+import { fetchQuestions, submitAnswer, fetchWrongQuestions, markWrongMastered, fetchReviewQuestions, submitReviewAnswer, generateQuizQuestions, fetchMoreQuestions, getExportUrl, shareWrongToCommunity } from "@/services/api";
 import { useUserStore } from "@/stores/userStore";
 import { toast } from "sonner";
 
@@ -172,6 +172,15 @@ function QuizPage() {
     window.open(url, "_blank");
   };
 
+  const handleShareWrong = async (wrongId: number) => {
+    try {
+      await shareWrongToCommunity(wrongId);
+      toast.success("已分享到社区");
+    } catch {
+      toast.error("分享失败");
+    }
+  };
+
   const isCorrectAnswer = (option: string) => {
     if (!current) return false;
     return option.trim().toUpperCase() === current.answer.trim().toUpperCase();
@@ -335,12 +344,21 @@ function QuizPage() {
                   </p>
                 )}
                 {mode === "wrong" && (
-                  <button
-                    onClick={() => handleMastered((current as WrongQuestion).wrong_id)}
-                    className="rounded-md bg-green-600 px-3 py-1.5 text-sm text-white hover:bg-green-700"
-                  >
-                    标记已掌握
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleMastered((current as WrongQuestion).wrong_id)}
+                      className="rounded-md bg-green-600 px-3 py-1.5 text-sm text-white hover:bg-green-700"
+                    >
+                      标记已掌握
+                    </button>
+                    <button
+                      onClick={() => handleShareWrong((current as WrongQuestion).wrong_id)}
+                      className="rounded-md bg-primary/10 px-3 py-1.5 text-sm text-primary hover:bg-primary/20 flex items-center gap-1"
+                    >
+                      <Share2 className="h-3.5 w-3.5" />
+                      分享到社区
+                    </button>
+                  </div>
                 )}
               </div>
             )}
