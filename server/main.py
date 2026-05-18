@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from api import chat, quiz, plan, user, knowledge, analysis, writing, focus
+from api import chat, quiz, plan, user, knowledge, analysis, writing, focus, export
 from api.exception_handler import generic_exception_handler, validation_exception_handler, http_exception_handler
 from db.database import init_db
 
@@ -37,6 +37,7 @@ app.include_router(knowledge.router, prefix="/api/knowledge", tags=["knowledge"]
 app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
 app.include_router(writing.router, prefix="/api/writing", tags=["writing"])
 app.include_router(focus.router, prefix="/api/focus", tags=["focus"])
+app.include_router(export.router, prefix="/api/export", tags=["export"])
 
 
 @app.get("/api/health")

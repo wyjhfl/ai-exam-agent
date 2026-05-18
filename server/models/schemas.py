@@ -21,6 +21,16 @@ class UserCreate(BaseModel):
     username: str = "default"
 
 
+class UserRegister(BaseModel):
+    username: str
+    password: str
+
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+
 class UserInfo(BaseModel):
     id: int
     username: str

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { PenLine, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { evaluateWriting, fetchWritingHistory } from "@/services/api";
-import { useChatStore } from "@/stores/chatStore";
+import { useUserStore } from "@/stores/userStore";
 import { toast } from "sonner";
 
 type EssayType = "english_writing" | "politics_essay";
@@ -24,7 +24,7 @@ interface HistoryItem {
 }
 
 function WritingPage() {
-  const { userId } = useChatStore();
+  const { userId } = useUserStore();
   const [essayType, setEssayType] = useState<EssayType>("english_writing");
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { Toaster } from "sonner";
+import { Toaster, toast } from "sonner";
+import { useEffect } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import HomePage from "@/pages/HomePage";
 import ChatPage from "@/pages/ChatPage";
@@ -10,36 +11,53 @@ import AnalysisPage from "@/pages/AnalysisPage";
 import FocusPage from "@/pages/FocusPage";
 import { useUserStore } from "@/stores/userStore";
 import { useChatStore } from "@/stores/chatStore";
-import { useEffect } from "react";
+import LoginForm from "@/components/LoginForm";
+import { checkForUpdate } from "@/services/api";
 
 function App() {
-  const { initUser } = useUserStore();
-  const { setUserId } = useChatStore();
+  const { restoreSession, isLoggedIn } = useUserStore();
   const userId = useUserStore((s) => s.userId);
+  const { setUserId } = useChatStore();
 
   useEffect(() => {
-    initUser();
+    restoreSession();
   }, []);
 
   useEffect(() => {
     if (userId) setUserId(userId);
   }, [userId]);
 
+  useEffect(() => {
+    if (isLoggedIn) {
+      checkForUpdate().then((result) => {
+        if (result.hasUpdate) {
+          toast.info(`发现新版本！${result.message}`);
+        }
+      }).catch(() => {});
+    }
+  }, [isLoggedIn]);
+
   return (
     <BrowserRouter>
       <div className="flex h-screen overflow-hidden bg-background text-foreground">
-        <Sidebar />
-        <main className="flex-1 overflow-hidden">
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/chat" element={<ChatPage />} />
-            <Route path="/quiz" element={<QuizPage />} />
-            <Route path="/writing" element={<WritingPage />} />
-            <Route path="/plan" element={<PlanPage />} />
-            <Route path="/analysis" element={<AnalysisPage />} />
-            <Route path="/focus" element={<FocusPage />} />
-          </Routes>
-        </main>
+        {isLoggedIn ? (
+          <>
+            <Sidebar />
+            <main className="flex-1 overflow-hidden">
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/chat" element={<ChatPage />} />
+                <Route path="/quiz" element={<QuizPage />} />
+                <Route path="/writing" element={<WritingPage />} />
+                <Route path="/plan" element={<PlanPage />} />
+                <Route path="/analysis" element={<AnalysisPage />} />
+                <Route path="/focus" element={<FocusPage />} />
+              </Routes>
+            </main>
+          </>
+        ) : (
+          <LoginForm />
+        )}
       </div>
       <Toaster richColors position="top-right" />
     </BrowserRouter>

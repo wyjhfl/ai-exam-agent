@@ -40,10 +40,10 @@ class RAGEngine:
         return chunks
 
     def index_document(self, doc_id: str, text: str, metadata: dict = None):
-        collection = self._get_collection()
         chunks = self._chunk_text(text)
         if not chunks:
             return
+        collection = self._get_collection()
         ids = [f"{doc_id}_chunk_{i}" for i in range(len(chunks))]
         metadatas = [{**(metadata or {}), "doc_id": doc_id, "chunk_index": i} for i in range(len(chunks))]
         existing = collection.get(ids=ids)
@@ -51,6 +51,29 @@ class RAGEngine:
             collection.delete(ids=existing["ids"])
         collection.add(ids=ids, documents=chunks, metadatas=metadatas)
         logger.info(f"Indexed {len(chunks)} chunks for document {doc_id}")
+
+    def index_document_with_count(self, doc_id: str, text: str, metadata: dict = None) -> int:
+        chunks = self._chunk_text(text)
+        if not chunks:
+            return 0
+        collection = self._get_collection()
+        ids = [f"{doc_id}_chunk_{i}" for i in range(len(chunks))]
+        metadatas = [{**(metadata or {}), "doc_id": doc_id, "chunk_index": i} for i in range(len(chunks))]
+        existing = collection.get(ids=ids)
+        if existing and existing["ids"]:
+            collection.delete(ids=existing["ids"])
+        collection.add(ids=ids, documents=chunks, metadatas=metadatas)
+        logger.info(f"Indexed {len(chunks)} chunks for document {doc_id}")
+        return len(chunks)
+
+    def clear_collection(self):
+        if self._client is not None:
+            try:
+                self._client.delete_collection(name=COLLECTION_NAME)
+            except Exception:
+                pass
+        self._collection = None
+        self._client = None
 
     def search(self, query: str, top_k: int = 3) -> list[dict]:
         collection = self._get_collection()
@@ -66,4 +89,14 @@ class RAGEngine:
 
     def get_status(self) -> dict:
         collection = self._get_collection()
-        return {"document_count": collection.count(), "collection_name": COLLECTION_NAME, "persist_dir": CHROMA_PERSIST_DIR}
+        all_meta = collection.get(include=["metadatas"])
+        file_set = set()
+        for m in (all_meta.get("metadatas") or []):
+            if m and "filename" in m:
+                file_set.add(m["filename"])
+        return {
+            "document_count": collection.count(),
+            "collection_name": COLLECTION_NAME,
+            "persist_dir": CHROMA_PERSIST_DIR,
+            "files": sorted(file_set),
+        }

@@ -2,6 +2,8 @@
 
 AI 驱动的考研备考桌面应用，基于 Tauri 2.0 + React + Python FastAPI 构建，支持政治/英语/数学三科备考。
 
+**当前版本：v0.2.0**
+
 ## 功能概览
 
 | 功能 | 说明 |
@@ -13,17 +15,21 @@ AI 驱动的考研备考桌面应用，基于 Tauri 2.0 + React + Python FastAPI
 | 作文批改 | 英语作文 AI 批改（语法/词汇/结构/改进版本），政治论述题评分 |
 | 学情分析 | 答题统计、各科正确率、7 天趋势图 |
 | 暗色模式 | 支持 light/dark/system 三种主题 |
-| 知识库 RAG | ChromaDB 本地向量检索，考研大纲知识增强 |
+| 知识库 RAG | ChromaDB 本地向量检索，13 个考研知识文档增强 |
+| 多用户系统 | 注册/登录，数据按用户隔离，支持多人共用 |
+| 数据导出 | 错题本和学习总结导出 Excel |
+| 番茄专注 | 番茄钟计时器，今日专注统计 |
+| 应用更新 | 启动时自动检查更新，Sidebar 手动检查 |
 
 ## 技术栈
 
 | 层级 | 技术 |
 |------|------|
 | 桌面框架 | Tauri 2.0 |
-| 前端 | React 18 + TypeScript + Vite |
+| 前端 | React 19 + TypeScript + Vite 8 |
 | UI | Tailwind CSS v4 + shadcn/ui + sonner (Toast) |
 | 状态管理 | Zustand |
-| 路由 | React Router DOM v6 |
+| 路由 | React Router DOM v7 |
 | 后端 | Python FastAPI + Uvicorn |
 | ORM | SQLAlchemy 2.0 (async) + aiosqlite |
 | 向量数据库 | ChromaDB（本地嵌入式） |
@@ -38,15 +44,16 @@ ai-exam-agent/
 ├── src-tauri/              # Tauri Rust 后端
 ├── src/                    # React 前端
 │   ├── components/
-│   │   ├── layout/         # Sidebar + MainLayout
+│   │   ├── layout/         # Sidebar + LoginForm
 │   │   └── ui/             # shadcn/ui 组件
-│   ├── pages/              # 6 个页面
+│   ├── pages/              # 7 个页面
 │   │   ├── HomePage        # 首页仪表盘
 │   │   ├── ChatPage        # AI 对话
 │   │   ├── QuizPage        # 刷题训练
 │   │   ├── PlanPage        # 备考规划
 │   │   ├── AnalysisPage    # 学情分析
-│   │   └── WritingPage     # 作文批改
+│   │   ├── WritingPage     # 作文批改
+│   │   └── FocusPage       # 番茄专注
 │   ├── stores/             # Zustand (chatStore, userStore, appStore)
 │   ├── services/           # API 调用层 (axios + 拦截器)
 │   └── lib/                # 工具库
@@ -58,7 +65,9 @@ ai-exam-agent/
 │   │   ├── plan.py         # 备考规划
 │   │   ├── analysis.py     # 学情分析
 │   │   ├── knowledge.py    # 知识库管理
-│   │   ├── user.py         # 用户管理
+│   │   ├── user.py         # 用户注册/登录
+│   │   ├── focus.py        # 番茄专注
+│   │   ├── export.py       # 数据导出 (Excel)
 │   │   └── exception_handler.py  # 统一异常处理
 │   ├── core/               # AI 核心逻辑
 │   │   ├── llm.py          # LLM 调用封装
@@ -75,7 +84,7 @@ ai-exam-agent/
 │   ├── config.py           # 统一配置 (pydantic-settings)
 │   └── scripts/            # 数据初始化脚本
 ├── data/                   # 运行时数据
-│   ├── knowledge-base/     # 考研知识文档 (Markdown)
+│   ├── knowledge-base/     # 考研知识文档 (13 个 Markdown)
 │   └── chroma_db/          # ChromaDB 向量索引
 └── docs/                   # 项目文档
 ```
@@ -87,6 +96,7 @@ ai-exam-agent/
 - Node.js >= 18
 - Rust >= 1.77（Tauri 2.0 要求）
 - Python >= 3.10
+- Visual Studio Build Tools（Windows，C++ 桌面开发工作负载）
 
 ### 1. 前端
 
@@ -116,7 +126,7 @@ pip install -r requirements.txt
 ```env
 LLM_API_KEY=你的API密钥
 LLM_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
-LLM_MODEL=mimo-v2.5-pro
+LLM_MODEL=mimo-v2.5
 ```
 
 > 如果系统环境变量中已有同名变量（如 `LLM_BASE_URL`），项目会优先使用 `.env` 中的值（`load_dotenv(override=True)`）。
@@ -147,7 +157,7 @@ python scripts/seed_quiz.py
 |--------|------|--------|
 | `LLM_API_KEY` | LLM API 密钥 | 空（必须配置） |
 | `LLM_BASE_URL` | LLM API 地址 | `https://token-plan-cn.xiaomimimo.com/v1` |
-| `LLM_MODEL` | 模型名称 | `mimo-v2.5-pro` |
+| `LLM_MODEL` | 模型名称 | `mimo-v2.5` |
 | `DATABASE_DIR` | SQLite 数据目录 | `../data` |
 | `CHROMA_PERSIST_DIR` | ChromaDB 持久化目录 | `../data/chroma_db` |
 | `KNOWLEDGE_BASE_DIR` | 知识库文档目录 | `../data/knowledge-base` |
@@ -158,6 +168,8 @@ python scripts/seed_quiz.py
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| POST | `/api/user/register` | 用户注册 |
+| POST | `/api/user/login` | 用户登录 |
 | POST | `/api/chat/stream` | AI 对话（SSE 流式） |
 | GET | `/api/chat/history/{user_id}` | 对话历史 |
 | GET | `/api/quiz/questions` | 获取题目列表 |
@@ -174,20 +186,54 @@ python scripts/seed_quiz.py
 | GET | `/api/analysis/{user_id}/overview` | 学情分析总览 |
 | GET | `/api/analysis/{user_id}/subject-stats` | 各科统计 |
 | GET | `/api/analysis/{user_id}/trend` | 7 天趋势 |
-| POST | `/api/knowledge/index` | 重建知识库索引 |
+| POST | `/api/knowledge/index` | 建立知识库索引 |
+| POST | `/api/knowledge/reindex` | 重建知识库索引 |
 | GET | `/api/knowledge/status` | 知识库状态 |
+| POST | `/api/focus/start` | 开始专注 |
+| POST | `/api/focus/complete` | 完成专注 |
+| GET | `/api/focus/today/{user_id}` | 今日专注统计 |
+| GET | `/api/export/{user_id}/wrong-questions/excel` | 导出错题本 Excel |
+| GET | `/api/export/{user_id}/study-summary/excel` | 导出学习总结 Excel |
 
 ## 数据库
 
 SQLite 本地数据库，包含以下表：
 
-- `users` — 用户信息
+- `users` — 用户信息（含密码哈希）
 - `chat_histories` — 对话历史（含 RAG sources）
 - `study_plans` — 学习计划
 - `quiz_questions` — 题目库
 - `quiz_records` — 答题记录
 - `wrong_questions` — 错题本（含 SM-2 间隔重复字段）
 - `study_sessions` — 学习记录
+
+## 更新日志
+
+### v0.2.0
+
+- 新增 10 个考研知识库文件（政治 4 个、英语 3 个、数学 3 个），知识库扩充至 13 个文件
+- 新增多用户注册/登录系统（SHA256 密码哈希、localStorage 会话持久化）
+- 新增数据导出功能（错题本 Excel、学习总结 Excel）
+- 新增知识库重新索引功能（POST /api/knowledge/reindex）
+- 新增知识库状态面板（文件列表、文档块数、可折叠显示）
+- 新增应用更新检查占位（Sidebar 版本号 + 检查更新按钮）
+- 新增 Tauri updater 插件集成
+- 所有页面 userId 统一从 userStore 获取，数据按用户隔离
+- 未登录时显示登录/注册表单覆盖层
+- 版本号统一更新至 0.2.0
+
+### v0.1.0
+
+- 初始版本发布
+- AI 对话问答（RAG + 流式输出）
+- 刷题训练 + AI 智能出题
+- 错题本（SM-2 间隔重复算法）
+- 备考规划（LLM 生成）
+- 学情分析看板
+- 英语作文 AI 批改
+- 番茄专注计时器
+- 暗色模式 + Toast 通知
+- 统一配置管理 + 统一异常处理
 
 ## License
 

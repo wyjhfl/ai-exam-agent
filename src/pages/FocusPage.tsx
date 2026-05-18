@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Play, Pause, RotateCcw, Timer } from "lucide-react";
 import { startFocus, completeFocus, fetchTodayFocus } from "@/services/api";
-import { useChatStore } from "@/stores/chatStore";
+import { useUserStore } from "@/stores/userStore";
 import { toast } from "sonner";
 
 const DURATIONS = [15, 25, 45, 60];
@@ -28,7 +28,7 @@ function playNotificationSound() {
 }
 
 function FocusPage() {
-  const { userId } = useChatStore();
+  const { userId } = useUserStore();
   const [duration, setDuration] = useState(25);
   const [subject, setSubject] = useState("数学");
   const [state, setState] = useState<FocusState>("idle");

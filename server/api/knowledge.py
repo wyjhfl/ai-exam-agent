@@ -24,16 +24,28 @@ async def index_knowledge_base():
         return {"status": "error", "message": "Knowledge base directory not found"}
 
     indexed = 0
-    for f in KNOWLEDGE_BASE_DIR.glob("*.md"):
+    total_chunks = 0
+    files = []
+    for f in sorted(KNOWLEDGE_BASE_DIR.glob("*.md")):
         content = f.read_text(encoding="utf-8", errors="ignore")
-        rag_engine.index_document(f.name, content, {"filename": f.name})
+        chunks = rag_engine.index_document_with_count(f.name, content, {"filename": f.name})
         indexed += 1
-    for f in KNOWLEDGE_BASE_DIR.glob("*.txt"):
+        total_chunks += chunks
+        files.append(f.name)
+    for f in sorted(KNOWLEDGE_BASE_DIR.glob("*.txt")):
         content = f.read_text(encoding="utf-8", errors="ignore")
-        rag_engine.index_document(f.name, content, {"filename": f.name})
+        chunks = rag_engine.index_document_with_count(f.name, content, {"filename": f.name})
         indexed += 1
+        total_chunks += chunks
+        files.append(f.name)
 
-    return {"status": "ok", "indexed_files": indexed}
+    return {"status": "ok", "indexed": indexed, "total_chunks": total_chunks, "files": files}
+
+
+@router.post("/reindex")
+async def reindex_knowledge_base():
+    rag_engine.clear_collection()
+    return await index_knowledge_base()
 
 
 @router.get("/status")

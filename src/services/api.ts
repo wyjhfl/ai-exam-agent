@@ -15,11 +15,21 @@ api.interceptors.response.use(
     } else if (error.response.status >= 500) {
       toast.error(error.response.data?.error || "服务器错误");
     } else if (error.response.status >= 400) {
-      toast.error(error.response.data?.error || "请求失败");
+      toast.error(error.response.data?.detail || error.response.data?.error || "请求失败");
     }
     return Promise.reject(error);
   }
 );
+
+export async function registerUser(username: string, password: string) {
+  const { data } = await api.post("/api/user/register", { username, password });
+  return data;
+}
+
+export async function loginUser(username: string, password: string) {
+  const { data } = await api.post("/api/user/login", { username, password });
+  return data;
+}
 
 export async function createUser(username: string = "default") {
   const { data } = await api.post("/api/user/create", { username });
@@ -99,6 +109,11 @@ export async function fetchKnowledgeStatus() {
 
 export async function indexKnowledgeBase() {
   const { data } = await api.post("/api/knowledge/index");
+  return data;
+}
+
+export async function reindexKnowledgeBase() {
+  const { data } = await api.post("/api/knowledge/reindex");
   return data;
 }
 
@@ -210,6 +225,20 @@ export async function completeFocus(sessionId: number, actualDuration: number) {
 export async function fetchTodayFocus(userId: number) {
   const { data } = await api.get(`/api/focus/today/${userId}`);
   return data;
+}
+
+export function getExportUrl(userId: number, type: "wrong-questions" | "study-summary", format: "json" | "excel" = "excel") {
+  const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+  if (format === "excel") {
+    return `${baseURL}/api/export/${userId}/${type}/excel`;
+  }
+  return `${baseURL}/api/export/${userId}/${type}`;
+}
+
+export const APP_VERSION = "0.2.0";
+
+export async function checkForUpdate(): Promise<{ hasUpdate: boolean; currentVersion: string; message: string }> {
+  return { hasUpdate: false, currentVersion: APP_VERSION, message: `当前已是最新版本 v${APP_VERSION}` };
 }
 
 export default api;

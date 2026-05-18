@@ -9,6 +9,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(100), unique=True, nullable=False)
+    password_hash = Column(String(128), nullable=True)
     target_school = Column(String(200))
     target_major = Column(String(200))
     exam_date = Column(String(20))

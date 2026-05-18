@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { CheckCircle, XCircle, BookOpen, Brain, Sparkles, Loader2 } from "lucide-react";
-import { fetchQuestions, submitAnswer, fetchWrongQuestions, markWrongMastered, fetchReviewQuestions, submitReviewAnswer, generateQuizQuestions, fetchMoreQuestions } from "@/services/api";
-import { useChatStore } from "@/stores/chatStore";
+import { CheckCircle, XCircle, BookOpen, Brain, Sparkles, Loader2, Download } from "lucide-react";
+import { fetchQuestions, submitAnswer, fetchWrongQuestions, markWrongMastered, fetchReviewQuestions, submitReviewAnswer, generateQuizQuestions, fetchMoreQuestions, getExportUrl } from "@/services/api";
+import { useUserStore } from "@/stores/userStore";
 import { toast } from "sonner";
 
 type Mode = "practice" | "wrong" | "review";
@@ -37,7 +37,7 @@ interface ReviewResult {
 }
 
 function QuizPage() {
-  const { userId } = useChatStore();
+  const { userId } = useUserStore();
   const [mode, setMode] = useState<Mode>("practice");
   const [subject, setSubject] = useState("全部");
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -104,7 +104,7 @@ function QuizPage() {
           correct: prev.correct + (isCorrect ? 1 : 0),
         }));
       } else if (mode === "practice") {
-        await submitAnswer(userId, (current as Question).id, option);
+        await submitAnswer(userId!, (current as Question).id, option);
       }
     } catch {
       toast.error("提交失败");
@@ -166,6 +166,12 @@ function QuizPage() {
     }
   };
 
+  const handleExportWrong = () => {
+    if (!userId) return;
+    const url = getExportUrl(userId, "wrong-questions", "excel");
+    window.open(url, "_blank");
+  };
+
   const isCorrectAnswer = (option: string) => {
     if (!current) return false;
     return option.trim().toUpperCase() === current.answer.trim().toUpperCase();
@@ -216,6 +222,15 @@ function QuizPage() {
           <Sparkles className="h-4 w-4" />
           AI 出题
         </button>
+        {mode === "wrong" && userId && (
+          <button
+            onClick={handleExportWrong}
+            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent transition-colors"
+          >
+            <Download className="h-4 w-4" />
+            导出错题
+          </button>
+        )}
       </div>
 
       {showGenerate && (

@@ -1,35 +1,46 @@
 import { create } from "zustand";
-import { createUser, getUser } from "@/services/api";
+import { registerUser, loginUser } from "@/services/api";
 
 interface UserState {
-  userId: number;
+  userId: number | null;
   username: string;
-  isLoaded: boolean;
-  initUser: () => Promise<void>;
+  isLoggedIn: boolean;
+  login: (username: string, password: string) => Promise<void>;
+  register: (username: string, password: string) => Promise<void>;
+  logout: () => void;
+  restoreSession: () => void;
 }
 
 export const useUserStore = create<UserState>((set) => ({
-  userId: Number(localStorage.getItem("ai_exam_user_id") || "0"),
+  userId: null,
   username: "",
-  isLoaded: false,
+  isLoggedIn: false,
 
-  initUser: async () => {
-    const storedId = Number(localStorage.getItem("ai_exam_user_id") || "0");
-    if (storedId > 0) {
-      try {
-        const user = await getUser(storedId);
-        set({ userId: user.id, username: user.username, isLoaded: true });
-        return;
-      } catch {
-        // user not found, create new
-      }
-    }
-    try {
-      const user = await createUser("user_" + Date.now());
-      localStorage.setItem("ai_exam_user_id", String(user.id));
-      set({ userId: user.id, username: user.username, isLoaded: true });
-    } catch {
-      set({ isLoaded: true });
+  login: async (username: string, password: string) => {
+    const data = await loginUser(username, password);
+    localStorage.setItem("ai_exam_user_id", String(data.user_id));
+    localStorage.setItem("ai_exam_username", data.username);
+    set({ userId: data.user_id, username: data.username, isLoggedIn: true });
+  },
+
+  register: async (username: string, password: string) => {
+    const data = await registerUser(username, password);
+    localStorage.setItem("ai_exam_user_id", String(data.user_id));
+    localStorage.setItem("ai_exam_username", data.username);
+    set({ userId: data.user_id, username: data.username, isLoggedIn: true });
+  },
+
+  logout: () => {
+    localStorage.removeItem("ai_exam_user_id");
+    localStorage.removeItem("ai_exam_username");
+    set({ userId: null, username: "", isLoggedIn: false });
+  },
+
+  restoreSession: () => {
+    const storedId = localStorage.getItem("ai_exam_user_id");
+    const storedName = localStorage.getItem("ai_exam_username");
+    if (storedId && storedName) {
+      set({ userId: Number(storedId), username: storedName, isLoggedIn: true });
     }
   },
 }));

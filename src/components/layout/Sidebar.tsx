@@ -1,6 +1,10 @@
 import { NavLink } from "react-router-dom";
-import { Home, MessageSquare, BookMarked, BookOpen, BarChart3, PenLine, Timer, Sun, Moon, Monitor, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Home, MessageSquare, BookMarked, BookOpen, BarChart3, PenLine, Timer, Sun, Moon, Monitor, PanelLeftClose, PanelLeft, User, LogOut, RefreshCw } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
+import { useUserStore } from "@/stores/userStore";
+import { APP_VERSION, checkForUpdate } from "@/services/api";
+import { toast } from "sonner";
+import { useState } from "react";
 
 const navItems = [
   { to: "/", icon: Home, label: "首页" },
@@ -14,6 +18,23 @@ const navItems = [
 
 function Sidebar() {
   const { theme, setTheme, sidebarCollapsed, toggleSidebar } = useAppStore();
+  const { username, logout } = useUserStore();
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    try {
+      const result = await checkForUpdate();
+      if (result.hasUpdate) {
+        toast.info(`发现新版本！${result.message}`);
+      } else {
+        toast.success(result.message);
+      }
+    } catch {
+      toast.error("检查更新失败");
+    }
+    setCheckingUpdate(false);
+  };
 
   const themeOptions: { value: "light" | "dark" | "system"; icon: typeof Sun; label: string }[] = [
     { value: "light", icon: Sun, label: "亮色" },
@@ -54,6 +75,24 @@ function Sidebar() {
       </nav>
 
       <div className="border-t border-border p-2 space-y-2">
+        <div className={`flex ${sidebarCollapsed ? "flex-col items-center" : "items-center justify-between"} gap-1`}>
+          {sidebarCollapsed ? (
+            <button onClick={logout} className="p-1.5 rounded hover:bg-accent" title={`${username} - 退出登录`}>
+              <User className="h-4 w-4" />
+            </button>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground truncate">
+                <User className="h-4 w-4 shrink-0" />
+                <span className="truncate">{username}</span>
+              </div>
+              <button onClick={logout} className="p-1.5 rounded hover:bg-accent" title="退出登录">
+                <LogOut className="h-4 w-4" />
+              </button>
+            </>
+          )}
+        </div>
+
         <div className={`flex ${sidebarCollapsed ? "flex-col items-center" : "items-center justify-center"} gap-1`}>
           {themeOptions.map((opt) => (
             <button
@@ -67,6 +106,22 @@ function Sidebar() {
               <opt.icon className="h-4 w-4" />
             </button>
           ))}
+        </div>
+
+        <div className={`flex ${sidebarCollapsed ? "flex-col items-center" : "items-center justify-between"} text-xs text-muted-foreground`}>
+          {sidebarCollapsed ? (
+            <button onClick={handleCheckUpdate} disabled={checkingUpdate} className="p-1 rounded hover:bg-accent" title={`v${APP_VERSION} - 检查更新`}>
+              <RefreshCw className={`h-3 w-3 ${checkingUpdate ? "animate-spin" : ""}`} />
+            </button>
+          ) : (
+            <>
+              <span>v{APP_VERSION}</span>
+              <button onClick={handleCheckUpdate} disabled={checkingUpdate} className="flex items-center gap-1 p-1 rounded hover:bg-accent">
+                <RefreshCw className={`h-3 w-3 ${checkingUpdate ? "animate-spin" : ""}`} />
+                <span>检查更新</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </aside>

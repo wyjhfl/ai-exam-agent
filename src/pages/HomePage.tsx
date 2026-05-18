@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, MessageSquare, BookMarked, BarChart3, Clock, Target, AlertCircle, Brain, Timer } from "lucide-react";
-import { fetchKnowledgeStatus, indexKnowledgeBase, fetchAnalysisOverview, fetchHistory, fetchReviewQuestions, fetchTodayFocus } from "@/services/api";
-import { useChatStore } from "@/stores/chatStore";
+import { BookOpen, MessageSquare, BookMarked, BarChart3, Clock, Target, AlertCircle, Brain, Timer, ChevronDown, ChevronUp } from "lucide-react";
+import { fetchKnowledgeStatus, indexKnowledgeBase, reindexKnowledgeBase, fetchAnalysisOverview, fetchHistory, fetchReviewQuestions, fetchTodayFocus } from "@/services/api";
+import { useUserStore } from "@/stores/userStore";
 import { toast } from "sonner";
 
 interface KnowledgeStatus {
   document_count: number;
   collection_name: string;
+  files: string[];
+  total_chunks: number;
 }
 
 interface Overview {
@@ -25,13 +27,14 @@ interface RecentChat {
 
 function HomePage() {
   const navigate = useNavigate();
-  const { userId } = useChatStore();
+  const { userId } = useUserStore();
   const [knowledgeStatus, setKnowledgeStatus] = useState<KnowledgeStatus | null>(null);
   const [indexing, setIndexing] = useState(false);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [recentChats, setRecentChats] = useState<RecentChat[]>([]);
   const [reviewCount, setReviewCount] = useState(0);
   const [todayFocusMinutes, setTodayFocusMinutes] = useState(0);
+  const [showFiles, setShowFiles] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -79,12 +82,16 @@ function HomePage() {
   const handleIndex = async () => {
     setIndexing(true);
     try {
-      await indexKnowledgeBase();
+      if (knowledgeStatus && knowledgeStatus.document_count > 0) {
+        await reindexKnowledgeBase();
+      } else {
+        await indexKnowledgeBase();
+      }
       const ks = await fetchKnowledgeStatus();
       setKnowledgeStatus(ks);
-      toast.success("索引建立成功");
+      toast.success("索引操作成功");
     } catch {
-      toast.error("索引建立失败");
+      toast.error("索引操作失败");
     }
     setIndexing(false);
   };
@@ -155,13 +162,33 @@ function HomePage() {
               disabled={indexing}
               className="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
-              {indexing ? "索引中..." : "建立索引"}
+              {indexing ? "索引中..." : knowledgeStatus && knowledgeStatus.document_count > 0 ? "重新索引" : "建立索引"}
             </button>
           </div>
           {knowledgeStatus ? (
-            <div className="text-sm">
-              <span className="text-muted-foreground">文档块数：</span>
-              <span className="font-medium">{knowledgeStatus.document_count}</span>
+            <div className="text-sm space-y-1">
+              <div>
+                <span className="text-muted-foreground">文档块数：</span>
+                <span className="font-medium">{knowledgeStatus.total_chunks ?? knowledgeStatus.document_count}</span>
+              </div>
+              {knowledgeStatus.files && knowledgeStatus.files.length > 0 && (
+                <div>
+                  <button
+                    onClick={() => setShowFiles(!showFiles)}
+                    className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                  >
+                    <span>文件列表 ({knowledgeStatus.files.length})</span>
+                    {showFiles ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  </button>
+                  {showFiles && (
+                    <div className="mt-1 space-y-0.5 pl-2">
+                      {knowledgeStatus.files.map((f, i) => (
+                        <p key={i} className="text-xs text-muted-foreground truncate">{f}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">未连接到知识库</p>

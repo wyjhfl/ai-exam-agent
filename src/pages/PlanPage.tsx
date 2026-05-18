@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { generatePlan, fetchPlan } from "@/services/api";
-import { useChatStore } from "@/stores/chatStore";
+import { useUserStore } from "@/stores/userStore";
 import { toast } from "sonner";
 
 interface PlanData {
@@ -23,7 +23,7 @@ interface PlanData {
 const DEFAULT_SUBJECTS: Record<string, number> = { 政治: 5, 英语: 5, 数学: 5 };
 
 function PlanPage() {
-  const { userId } = useChatStore();
+  const { userId } = useUserStore();
   const [targetSchool, setTargetSchool] = useState("");
   const [targetMajor, setTargetMajor] = useState("");
   const [examDate, setExamDate] = useState("");

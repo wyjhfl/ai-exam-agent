@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
-import { Clock, Target, TrendingUp, AlertCircle } from "lucide-react";
-import { fetchAnalysisOverview, fetchSubjectStats, fetchTrend } from "@/services/api";
-import { useChatStore } from "@/stores/chatStore";
+import { useEffect, useState, useRef } from "react";
+import { Clock, Target, TrendingUp, AlertCircle, Download } from "lucide-react";
+import { fetchAnalysisOverview, fetchSubjectStats, fetchTrend, getExportUrl } from "@/services/api";
+import { useUserStore } from "@/stores/userStore";
 
 interface Overview {
   total_study_minutes: number;
@@ -25,14 +25,26 @@ interface TrendDay {
 }
 
 function AnalysisPage() {
-  const { userId } = useChatStore();
+  const { userId } = useUserStore();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [subjectStats, setSubjectStats] = useState<SubjectStat[]>([]);
   const [trend, setTrend] = useState<TrendDay[]>([]);
+  const [showExport, setShowExport] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (userId) loadData();
   }, [userId]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setShowExport(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const loadData = async () => {
     if (!userId) return;
@@ -50,12 +62,46 @@ function AnalysisPage() {
     }
   };
 
+  const handleExport = (type: "wrong-questions" | "study-summary") => {
+    if (!userId) return;
+    const url = getExportUrl(userId, type, "excel");
+    window.open(url, "_blank");
+    setShowExport(false);
+  };
+
   const hasData = overview && overview.total_quiz_count > 0;
   const maxQuizInTrend = Math.max(...trend.map((t) => t.total), 1);
 
   return (
     <div className="p-4 md:p-6 space-y-6 overflow-y-auto h-full">
-      <h1 className="text-lg font-semibold">学情分析</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-semibold">学情分析</h1>
+        <div className="relative" ref={exportRef}>
+          <button
+            onClick={() => setShowExport(!showExport)}
+            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent transition-colors"
+          >
+            <Download className="h-4 w-4" />
+            导出数据
+          </button>
+          {showExport && (
+            <div className="absolute right-0 mt-1 w-48 rounded-md border border-border bg-card shadow-lg z-10">
+              <button
+                onClick={() => handleExport("wrong-questions")}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
+              >
+                导出错题本(Excel)
+              </button>
+              <button
+                onClick={() => handleExport("study-summary")}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
+              >
+                导出学习总结(Excel)
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
 
       {!hasData ? (
         <div className="flex flex-col items-center justify-center py-20 space-y-3">
