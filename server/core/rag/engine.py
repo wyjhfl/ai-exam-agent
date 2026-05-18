@@ -87,6 +87,43 @@ class RAGEngine:
                 items.append({"text": doc, "metadata": meta, "distance": results["distances"][0][i] if results.get("distances") else None})
         return items
 
+    def search_with_user(self, query: str, user_id: int = None, top_k: int = 5) -> list[dict]:
+        global_results = self.search(query, top_k=top_k)
+        user_results = []
+        if user_id:
+            collection = self._get_collection()
+            try:
+                user_res = collection.query(
+                    query_texts=[query],
+                    n_results=min(top_k, collection.count()) if collection.count() > 0 else 0,
+                    where={"user_id": user_id},
+                )
+                if user_res and user_res["documents"] and user_res["documents"][0]:
+                    for i, doc in enumerate(user_res["documents"][0]):
+                        meta = user_res["metadatas"][0][i] if user_res["metadatas"] else {}
+                        user_results.append({"text": doc, "metadata": meta, "distance": user_res["distances"][0][i] if user_res.get("distances") else None})
+            except Exception as e:
+                logger.warning(f"User-specific search failed: {e}")
+
+        seen = set()
+        merged = []
+        for r in user_results + global_results:
+            key = r["text"][:200]
+            if key not in seen:
+                seen.add(key)
+                merged.append(r)
+        return merged[:top_k]
+
+    def remove_document(self, doc_id: str):
+        collection = self._get_collection()
+        try:
+            all_data = collection.get(where={"doc_id": doc_id})
+            if all_data and all_data["ids"]:
+                collection.delete(ids=all_data["ids"])
+                logger.info(f"Removed {len(all_data['ids'])} chunks for document {doc_id}")
+        except Exception as e:
+            logger.warning(f"Failed to remove document {doc_id}: {e}")
+
     def get_status(self) -> dict:
         collection = self._get_collection()
         all_meta = collection.get(include=["metadatas"])

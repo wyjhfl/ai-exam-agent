@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Loader2, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
-import { generatePlan, fetchPlan } from "@/services/api";
+import { Loader2, RefreshCw, ChevronDown, ChevronUp, BookOpen } from "lucide-react";
+import { generatePlan, fetchPlan, generateStudyPlanFromMaterials } from "@/services/api";
 import { useUserStore } from "@/stores/userStore";
 import { toast } from "sonner";
 
@@ -31,6 +31,9 @@ function PlanPage() {
   const [plan, setPlan] = useState<PlanData | null>(null);
   const [loading, setLoading] = useState(false);
   const [expandedSubject, setExpandedSubject] = useState<number | null>(null);
+  const [materialPlan, setMaterialPlan] = useState<string | null>(null);
+  const [materialPlanSubject, setMaterialPlanSubject] = useState("数学");
+  const [materialPlanLoading, setMaterialPlanLoading] = useState(false);
 
   useEffect(() => {
     if (userId) loadPlan();
@@ -61,6 +64,19 @@ function PlanPage() {
       toast.error("生成失败，请稍后重试");
     }
     setLoading(false);
+  };
+
+  const handleMaterialPlan = async () => {
+    if (!userId) return;
+    setMaterialPlanLoading(true);
+    try {
+      const data = await generateStudyPlanFromMaterials(userId, materialPlanSubject);
+      setMaterialPlan(data.plan);
+      toast.success("基于教辅的计划生成成功！");
+    } catch {
+      toast.error("生成失败，请稍后重试");
+    }
+    setMaterialPlanLoading(false);
   };
 
   const handleSubjectLevel = (name: string, value: number) => {
@@ -143,14 +159,56 @@ function PlanPage() {
             "生成计划"
           )}
         </button>
+
+        <div className="border-t border-border pt-3 space-y-2">
+          <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+            <BookOpen className="h-3 w-3" />
+            基于我的教辅生成计划
+          </p>
+          <select
+            value={materialPlanSubject}
+            onChange={(e) => setMaterialPlanSubject(e.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="政治">政治</option>
+            <option value="英语">英语</option>
+            <option value="数学">数学</option>
+          </select>
+          <button
+            onClick={handleMaterialPlan}
+            disabled={materialPlanLoading}
+            className="w-full flex items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm hover:bg-accent/80 disabled:opacity-50"
+          >
+            {materialPlanLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                生成中...
+              </>
+            ) : (
+              "基于教辅生成"
+            )}
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
-        {!plan ? (
+        {materialPlan && (
+          <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
+            <h3 className="font-semibold mb-2 flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-blue-500" />
+              基于教辅的学习计划
+            </h3>
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <div dangerouslySetInnerHTML={{ __html: formatMarkdown(materialPlan) }} />
+            </div>
+          </div>
+        )}
+
+        {!plan && !materialPlan ? (
           <div className="flex h-full items-center justify-center">
             <p className="text-muted-foreground">填写目标信息后点击"生成计划"</p>
           </div>
-        ) : (
+        ) : plan ? (
           <>
             <div className="rounded-lg border border-border p-4">
               <h3 className="font-semibold mb-2">总体策略</h3>
@@ -221,10 +279,26 @@ function PlanPage() {
               </div>
             </div>
           </>
-        )}
+        ) : null}
       </div>
     </div>
   );
 }
 
 export default PlanPage;
+
+function formatMarkdown(text: string): string {
+  let html = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, "<pre><code>$2</code></pre>");
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
+  html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>");
+  html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>");
+  html = html.replace(/^# (.+)$/gm, "<h1>$1</h1>");
+  html = html.replace(/\n/g, "<br/>");
+  return html;
+}

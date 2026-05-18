@@ -56,3 +56,18 @@ class PlanGenerateRequest(BaseModel):
     target_major: str
     exam_date: str = ""
     subjects: dict[str, int] = {}
+
+
+class GuidanceStudyPlanRequest(BaseModel):
+    user_id: int
+    subject: str
+
+
+class GuidanceExplainRequest(BaseModel):
+    user_id: int
+    topic: str
+
+
+class GuidanceSolveRequest(BaseModel):
+    user_id: int
+    question_text: str

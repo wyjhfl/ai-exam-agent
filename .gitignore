@@ -49,6 +49,7 @@ server/.env
 data/*.db
 data/chroma_db/
 server/data/
+data/uploads/
 
 # Tauri build
 src-tauri/target/

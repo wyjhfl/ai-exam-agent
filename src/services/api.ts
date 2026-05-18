@@ -237,6 +237,62 @@ export function getExportUrl(userId: number, type: "wrong-questions" | "study-su
 
 export const APP_VERSION = "0.2.0";
 
+export async function uploadFile(userId: number, subject: string, fileType: string, file: File, onProgress?: (pct: number) => void) {
+  const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+  const formData = new FormData();
+  formData.append("user_id", String(userId));
+  formData.append("subject", subject);
+  formData.append("file_type", fileType);
+  formData.append("file", file);
+
+  return new Promise<{ file_id: string; filename: string; subject: string; file_type: string; pages: number; chunks: number; size: number }>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${baseURL}/api/uploads/upload`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText));
+      } else {
+        reject(new Error(xhr.responseText));
+      }
+    };
+    xhr.onerror = () => reject(new Error("上传失败"));
+    xhr.send(formData);
+  });
+}
+
+export async function fetchUploads(userId: number) {
+  const { data } = await api.get(`/api/uploads/${userId}`);
+  return data;
+}
+
+export async function deleteUpload(userId: number, fileId: string) {
+  const { data } = await api.delete(`/api/uploads/${userId}/${fileId}`);
+  return data;
+}
+
+export async function reindexUpload(userId: number, fileId: string) {
+  const { data } = await api.post(`/api/uploads/${userId}/${fileId}/reindex`);
+  return data;
+}
+
+export async function generateStudyPlanFromMaterials(userId: number, subject: string) {
+  const { data } = await api.post("/api/guidance/study-plan", { user_id: userId, subject });
+  return data;
+}
+
+export async function explainTopic(userId: number, topic: string) {
+  const { data } = await api.post("/api/guidance/explain", { user_id: userId, topic });
+  return data;
+}
+
+export async function solveQuestion(userId: number, questionText: string) {
+  const { data } = await api.post("/api/guidance/solve", { user_id: userId, question_text: questionText });
+  return data;
+}
+
 export async function checkForUpdate(): Promise<{ hasUpdate: boolean; currentVersion: string; message: string }> {
   return { hasUpdate: false, currentVersion: APP_VERSION, message: `当前已是最新版本 v${APP_VERSION}` };
 }

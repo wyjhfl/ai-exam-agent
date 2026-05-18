@@ -32,11 +32,15 @@ async def send_message(request: ChatRequest, session: AsyncSession = Depends(get
 
     sources = []
     try:
-        rag_results = rag_engine.search(request.message, top_k=3)
+        rag_results = rag_engine.search_with_user(request.message, user_id=request.user_id, top_k=5)
         if rag_results:
             context = "\n\n".join([r["text"] for r in rag_results])
             sources = [{"text": r["text"][:100], "metadata": r.get("metadata", {})} for r in rag_results]
-            enhanced_msg = f"参考以下资料回答问题：\n\n{context}\n\n学生问题：{request.message}"
+            has_user_material = any(r.get("metadata", {}).get("user_id") for r in rag_results)
+            prefix = "参考以下资料回答问题"
+            if has_user_material:
+                prefix = "参考以下资料回答问题（优先基于用户上传的教辅资料）"
+            enhanced_msg = f"{prefix}：\n\n{context}\n\n学生问题：{request.message}"
             history_msgs.append({"role": "user", "content": enhanced_msg})
     except Exception as e:
         logger.warning(f"RAG search failed: {e}")
@@ -78,10 +82,14 @@ async def stream_message(request: ChatRequest, background_tasks: BackgroundTasks
     history_msgs = [{"role": m.role, "content": m.content} for m in await _get_history(request.user_id, session)]
 
     try:
-        rag_results = rag_engine.search(request.message, top_k=3)
+        rag_results = rag_engine.search_with_user(request.message, user_id=request.user_id, top_k=5)
         if rag_results:
             context = "\n\n".join([r["text"] for r in rag_results])
-            enhanced_msg = f"参考以下资料回答问题：\n\n{context}\n\n学生问题：{request.message}"
+            has_user_material = any(r.get("metadata", {}).get("user_id") for r in rag_results)
+            prefix = "参考以下资料回答问题"
+            if has_user_material:
+                prefix = "参考以下资料回答问题（优先基于用户上传的教辅资料）"
+            enhanced_msg = f"{prefix}：\n\n{context}\n\n学生问题：{request.message}"
             history_msgs.append({"role": "user", "content": enhanced_msg})
     except Exception as e:
         logger.warning(f"RAG search failed: {e}")

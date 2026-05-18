@@ -9,6 +9,7 @@ import WritingPage from "@/pages/WritingPage";
 import PlanPage from "@/pages/PlanPage";
 import AnalysisPage from "@/pages/AnalysisPage";
 import FocusPage from "@/pages/FocusPage";
+import MaterialsPage from "@/pages/MaterialsPage";
 import { useUserStore } from "@/stores/userStore";
 import { useChatStore } from "@/stores/chatStore";
 import LoginForm from "@/components/LoginForm";
@@ -47,6 +48,7 @@ function App() {
               <Routes>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/chat" element={<ChatPage />} />
+                <Route path="/materials" element={<MaterialsPage />} />
                 <Route path="/quiz" element={<QuizPage />} />
                 <Route path="/writing" element={<WritingPage />} />
                 <Route path="/plan" element={<PlanPage />} />
