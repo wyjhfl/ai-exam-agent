@@ -54,3 +54,14 @@
     font-family: system-ui, -apple-system, sans-serif;
   }
 }
+
+.katex-display {
+  margin: 0.5em 0;
+  overflow-x: auto;
+}
+.katex-inline .katex {
+  font-size: 1em;
+}
+.dark .katex {
+  color: var(--color-foreground);
+}

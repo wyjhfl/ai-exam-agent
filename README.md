@@ -2,7 +2,7 @@
 
 AI 驱动的考研备考桌面应用，基于 Tauri 2.0 + React + Python FastAPI 构建，支持政治/英语/数学三科备考。
 
-**当前版本：v0.3.0**
+**当前版本：v0.4.0**
 
 ## 功能概览
 
@@ -24,6 +24,14 @@ AI 驱动的考研备考桌面应用，基于 Tauri 2.0 + React + Python FastAPI
 | AI 学习指导 | 基于上传资料生成学习计划、讲解知识点、解答题目 |
 | 云端同步 | 多设备数据同步（上传/下载/全量合并），登录自动同步 |
 | 社区论坛 | 分享错题和备考经验，帖子点赞、评论、筛选 |
+| 多题型支持 | 单选/多选/判断/填空/简答 5 种题型，AI 智能出题 |
+| 模拟考试 | 计时组卷、题号导航、成绩报告、错题自动收录 |
+| 知识点掌握度 | 三科知识点树 + 掌握度追踪（红/黄/绿三色标记） |
+| 在线资源搜索 | DuckDuckGo 搜索考研资料，一键下载索引 |
+| 苏格拉底引导教学 | 引导式提问、3 级提示、不直接给答案 |
+| RAG 语义增强 | 语义切分、查询扩展、LLM 重排序 |
+| 数学公式渲染 | KaTeX 渲染行内/独立公式，暗色模式适配 |
+| 学习提醒 | 待复习错题提醒、活跃计划提醒、Sidebar badge |
 
 ## 技术栈
 
@@ -50,7 +58,7 @@ ai-exam-agent/
 │   ├── components/
 │   │   ├── layout/         # Sidebar + LoginForm
 │   │   └── ui/             # shadcn/ui 组件
-│   ├── pages/              # 9 个页面
+│   ├── pages/              # 11 个页面
 │   │   ├── HomePage        # 首页仪表盘
 │   │   ├── ChatPage        # AI 对话
 │   │   ├── QuizPage        # 刷题训练
@@ -59,7 +67,8 @@ ai-exam-agent/
 │   │   ├── WritingPage     # 作文批改
 │   │   ├── FocusPage       # 番茄专注
 │   │   ├── MaterialsPage   # 资料管理
-│   │   └── CommunityPage   # 社区论坛
+│   │   ├── CommunityPage   # 社区论坛
+│   │   └── KnowledgePage   # 知识点体系
 │   ├── stores/             # Zustand (chatStore, userStore, appStore, syncStore)
 │   ├── services/           # API 调用层 (axios + 拦截器)
 │   └── lib/                # 工具库
@@ -78,6 +87,9 @@ ai-exam-agent/
 │   │   ├── guidance.py     # AI 学习指导
 │   │   ├── sync.py         # 云端数据同步
 │   │   ├── community.py    # 社区论坛
+│   │   ├── knowledge_points.py # 知识点体系
+│   │   ├── resources.py    # 在线资源搜索
+│   │   ├── reminders.py    # 学习提醒
 │   │   └── exception_handler.py  # 统一异常处理
 │   ├── core/               # AI 核心逻辑
 │   │   ├── llm.py          # LLM 调用封装
@@ -87,7 +99,9 @@ ai-exam-agent/
 │   │   ├── writing_evaluator.py  # 作文批改引擎
 │   │   ├── spaced_repetition.py  # SM-2 间隔重复
 │   │   ├── document_processor.py # 文档解析 (PDF/DOCX/TXT)
-│   │   └── study_guide.py  # AI 学习指导引擎
+│   │   ├── study_guide.py  # AI 学习指导引擎
+│   │   ├── knowledge_graph.py # 知识点树 + 掌握度
+│   │   └── guided_tutor.py # 苏格拉底引导教学
 │   ├── db/                 # 数据库层
 │   │   ├── database.py     # 异步引擎 + 会话
 │   │   └── models.py       # SQLAlchemy 模型
@@ -224,6 +238,16 @@ python scripts/seed_quiz.py
 | POST | `/api/community/posts/{id}/comment` | 评论 |
 | GET | `/api/community/posts/{id}/comments` | 获取评论列表 |
 | POST | `/api/community/share-wrong/{wrong_id}` | 一键分享错题 |
+| GET | `/api/knowledge-points/tree` | 获取全部知识点树 |
+| GET | `/api/knowledge-points/tree/{subject}` | 获取科目知识点树 |
+| GET | `/api/knowledge-points/{user_id}/mastery` | 获取用户掌握度 |
+| POST | `/api/quiz/mock-exam` | 开始模拟考试 |
+| POST | `/api/quiz/mock-exam/{exam_id}/submit` | 提交模拟考试 |
+| GET | `/api/resources/search` | 搜索在线资源 |
+| POST | `/api/resources/download` | 下载并索引资源 |
+| POST | `/api/resources/generate-from-url` | 从 URL 生成题目 |
+| POST | `/api/chat/guided` | 苏格拉底引导教学 |
+| GET | `/api/reminders/{user_id}` | 获取学习提醒 |
 
 ## 数据库
 
@@ -239,8 +263,23 @@ SQLite 本地数据库，包含以下表：
 - `user_uploads` — 用户上传文件
 - `shared_items` — 社区分享内容
 - `comments` — 社区评论
+- `mock_exams` — 模拟考试记录
 
 ## 更新日志
+
+### v0.4.0
+
+- 新增多题型支持（单选/多选/判断/填空/简答 5 种题型，AI 智能出题）
+- 新增模拟考试（计时组卷、题号导航、成绩报告、错题自动收录）
+- 新增知识点掌握度追踪（三科知识点树 + 红/黄/绿三色标记）
+- 新增在线资源搜索与下载（DuckDuckGo 搜索、一键下载索引、从 URL 生成题目）
+- 新增苏格拉底式引导教学（引导式提问、3 级提示系统、不直接给答案）
+- 新增 RAG 语义增强（语义切分、查询扩展、LLM 重排序）
+- 新增数学公式渲染（KaTeX 渲染行内/独立公式，暗色模式适配）
+- 新增学习提醒系统（待复习错题提醒、活跃计划提醒、Sidebar badge）
+- LLM System Prompt 新增 LaTeX 公式格式规则
+- 共享 formatMarkdown/renderLatex 工具函数（src/lib/format.ts）
+- 版本号统一更新至 0.4.0
 
 ### v0.3.0
 

@@ -60,6 +60,7 @@ class QuizQuestion(Base):
     topic = Column(String(200))
     difficulty = Column(String(20))
     question_text = Column(Text, nullable=False)
+    question_type = Column(String(30), default="single_choice")
     options = Column(JSON, default=[])
     answer = Column(Text, nullable=False)
     explanation = Column(Text)
@@ -144,3 +145,19 @@ class Comment(Base):
 
     user = relationship("User")
     shared_item = relationship("SharedItem", back_populates="comments")
+
+
+class MockExam(Base):
+    __tablename__ = "mock_exams"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    subject = Column(String(100), nullable=False)
+    total_score = Column(Float, default=0.0)
+    max_score = Column(Float, default=0.0)
+    duration = Column(Integer, default=0)
+    question_count = Column(Integer, default=0)
+    correct_count = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+
+    user = relationship("User")

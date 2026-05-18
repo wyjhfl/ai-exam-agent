@@ -9,6 +9,7 @@ from db.models import ChatHistory
 from models.schemas import ChatRequest, ChatResponse
 from core.llm import chat_completion_sync, chat_completion_stream
 from core.rag.engine import RAGEngine
+from core.guided_tutor import GuidedTutor
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -133,3 +134,54 @@ async def _get_history(user_id: int, session: AsyncSession, limit: int = 50) -> 
     messages = list(result.scalars().all())
     messages.reverse()
     return messages
+
+
+@router.post("/guided")
+async def guided_teaching(request: dict, session: AsyncSession = Depends(get_session)):
+    message = request.get("message", "")
+    user_id = request.get("user_id")
+    topic = request.get("topic", "")
+    hint_level = request.get("hint_level", 0)
+
+    if not user_id:
+        return {"error": "user_id is required"}
+
+    if not message and topic:
+        response_text = GuidedTutor.generate_guided_question(user_id, topic)
+        is_question = response_text.strip().endswith("？") or response_text.strip().endswith("?")
+    elif hint_level and hint_level > 0 and topic:
+        response_text = GuidedTutor.get_hint(user_id, topic, hint_level)
+        is_question = True
+    else:
+        history_records = await _get_history(user_id, session, limit=10)
+        history = [
+            {"role": m.role, "content": m.content}
+            for m in history_records
+            if m.role in ("user", "assistant") and m.sources is None
+        ]
+        result = GuidedTutor.evaluate_and_respond(user_id, topic, message, history)
+        response_text = result["response"]
+        is_question = result["is_question"]
+
+    user_msg = ChatHistory(
+        user_id=user_id,
+        role="user",
+        content=message or f"[引导学习] 请求关于「{topic}」的引导问题",
+        sources=[{"chat_type": "guided"}],
+    )
+    session.add(user_msg)
+
+    ai_msg = ChatHistory(
+        user_id=user_id,
+        role="assistant",
+        content=response_text,
+        sources=[{"chat_type": "guided", "topic": topic}],
+    )
+    session.add(ai_msg)
+    await session.commit()
+
+    return {
+        "response": response_text,
+        "is_question": is_question,
+        "hint_available": hint_level < 3,
+    }

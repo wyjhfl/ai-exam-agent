@@ -11,6 +11,7 @@ import AnalysisPage from "@/pages/AnalysisPage";
 import FocusPage from "@/pages/FocusPage";
 import MaterialsPage from "@/pages/MaterialsPage";
 import CommunityPage from "@/pages/CommunityPage";
+import KnowledgePage from "@/pages/KnowledgePage";
 import { useUserStore } from "@/stores/userStore";
 import { useChatStore } from "@/stores/chatStore";
 import LoginForm from "@/components/LoginForm";
@@ -56,6 +57,7 @@ function App() {
                 <Route path="/analysis" element={<AnalysisPage />} />
                 <Route path="/focus" element={<FocusPage />} />
                 <Route path="/community" element={<CommunityPage />} />
+                <Route path="/knowledge" element={<KnowledgePage />} />
               </Routes>
             </main>
           </>

@@ -132,8 +132,8 @@ export async function fetchMoreQuestions(subject: string, count: number = 5) {
   return data;
 }
 
-export async function generateQuizQuestions(subject: string, topic: string, difficulty: string, count: number) {
-  const { data } = await api.post("/api/quiz/generate", { subject, topic, difficulty, count });
+export async function generateQuizQuestions(subject: string, topic: string, difficulty: string, count: number, questionType: string = "single_choice") {
+  const { data } = await api.post("/api/quiz/generate", { subject, topic, difficulty, count, question_type: questionType });
   return data;
 }
 
@@ -235,7 +235,7 @@ export function getExportUrl(userId: number, type: "wrong-questions" | "study-su
   return `${baseURL}/api/export/${userId}/${type}`;
 }
 
-export const APP_VERSION = "0.3.0";
+export const APP_VERSION = "0.4.0";
 
 export async function uploadFile(userId: number, subject: string, fileType: string, file: File, onProgress?: (pct: number) => void) {
   const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -347,6 +347,57 @@ export async function commentCommunityPost(postId: number, userId: number, conte
 
 export async function shareWrongToCommunity(wrongId: number) {
   const { data } = await api.post(`/api/community/share-wrong/${wrongId}`);
+  return data;
+}
+
+export async function startMockExam(userId: number, subject: string, count: number, duration: number) {
+  const { data } = await api.post("/api/quiz/mock-exam", { user_id: userId, subject, question_count: count, duration_minutes: duration });
+  return data;
+}
+
+export async function submitMockExam(examId: number, answers: {question_id: number; selected_answer: string}[], durationSeconds: number) {
+  const { data } = await api.post(`/api/quiz/mock-exam/${examId}/submit`, { answers, duration_seconds: durationSeconds });
+  return data;
+}
+
+export async function getKnowledgeTree(subject?: string) {
+  if (subject) {
+    const { data } = await api.get(`/api/knowledge-points/tree/${subject}`);
+    return data;
+  }
+  const { data } = await api.get("/api/knowledge-points/tree");
+  return data;
+}
+
+export async function getUserMastery(userId: number) {
+  const { data } = await api.get(`/api/knowledge-points/${userId}/mastery`);
+  return data;
+}
+
+export async function searchResources(query: string, subject?: string) {
+  const params: Record<string, string> = { query };
+  if (subject) params.subject = subject;
+  const { data } = await api.get("/api/resources/search", { params });
+  return data;
+}
+
+export async function downloadResource(url: string, userId: number, subject: string, fileType: string) {
+  const { data } = await api.post("/api/resources/download", { url, user_id: userId, subject, file_type: fileType });
+  return data;
+}
+
+export async function generateFromUrl(url: string, subject: string, questionType: string, count: number) {
+  const { data } = await api.post("/api/resources/generate-from-url", { url, subject, question_type: questionType, count });
+  return data;
+}
+
+export async function guidedTeaching(userId: number, message: string, topic: string, hintLevel: number = 0) {
+  const { data } = await api.post("/api/chat/guided", { user_id: userId, message, topic, hint_level: hintLevel });
+  return data;
+}
+
+export async function fetchReminders(userId: number) {
+  const { data } = await api.get(`/api/reminders/${userId}`);
   return data;
 }
 

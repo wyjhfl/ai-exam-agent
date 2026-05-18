@@ -1,11 +1,11 @@
 import { NavLink } from "react-router-dom";
-import { Home, MessageSquare, BookMarked, BookOpen, BarChart3, PenLine, Timer, Sun, Moon, Monitor, PanelLeftClose, PanelLeft, User, LogOut, RefreshCw, FolderOpen, Users } from "lucide-react";
+import { Home, MessageSquare, BookMarked, BookOpen, BarChart3, PenLine, Timer, Sun, Moon, Monitor, PanelLeftClose, PanelLeft, User, LogOut, RefreshCw, FolderOpen, Users, Network } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { useUserStore } from "@/stores/userStore";
 import { useSyncStore } from "@/stores/syncStore";
-import { APP_VERSION, checkForUpdate } from "@/services/api";
+import { APP_VERSION, checkForUpdate, fetchReminders } from "@/services/api";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const navItems = [
   { to: "/", icon: Home, label: "首页" },
@@ -15,6 +15,7 @@ const navItems = [
   { to: "/writing", icon: PenLine, label: "作文" },
   { to: "/plan", icon: BookOpen, label: "规划" },
   { to: "/analysis", icon: BarChart3, label: "分析" },
+  { to: "/knowledge", icon: Network, label: "知识点" },
   { to: "/community", icon: Users, label: "社区" },
   { to: "/focus", icon: Timer, label: "专注" },
 ];
@@ -24,6 +25,16 @@ function Sidebar() {
   const { username, logout, userId } = useUserStore();
   const { lastSyncTime, isSyncing, syncNow } = useSyncStore();
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [dueCount, setDueCount] = useState(0);
+
+  useEffect(() => {
+    if (userId) {
+      fetchReminders(userId).then((data) => {
+        const review = (data.reminders || []).find((r: any) => r.type === "review");
+        setDueCount(review?.count || 0);
+      }).catch(() => {});
+    }
+  }, [userId]);
 
   const handleSync = () => {
     if (userId) syncNow(userId);
@@ -87,6 +98,11 @@ function Sidebar() {
           >
             <item.icon className="h-4 w-4 shrink-0" />
             {!sidebarCollapsed && <span>{item.label}</span>}
+            {!sidebarCollapsed && item.to === "/quiz" && dueCount > 0 && (
+              <span className="rounded-full bg-destructive text-destructive-foreground px-1.5 text-xs ml-auto">
+                {dueCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

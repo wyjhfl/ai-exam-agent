@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, MessageSquare, BookMarked, BarChart3, Clock, Target, AlertCircle, Brain, Timer, ChevronDown, ChevronUp } from "lucide-react";
-import { fetchKnowledgeStatus, indexKnowledgeBase, reindexKnowledgeBase, fetchAnalysisOverview, fetchHistory, fetchReviewQuestions, fetchTodayFocus } from "@/services/api";
+import { BookOpen, MessageSquare, BookMarked, BarChart3, Clock, Target, AlertCircle, Brain, Timer, ChevronDown, ChevronUp, Bell } from "lucide-react";
+import { fetchKnowledgeStatus, indexKnowledgeBase, reindexKnowledgeBase, fetchAnalysisOverview, fetchHistory, fetchReviewQuestions, fetchTodayFocus, fetchReminders } from "@/services/api";
 import { useUserStore } from "@/stores/userStore";
 import { toast } from "sonner";
 
@@ -35,6 +35,7 @@ function HomePage() {
   const [reviewCount, setReviewCount] = useState(0);
   const [todayFocusMinutes, setTodayFocusMinutes] = useState(0);
   const [showFiles, setShowFiles] = useState(false);
+  const [reminders, setReminders] = useState<any[]>([]);
 
   useEffect(() => {
     loadData();
@@ -76,6 +77,12 @@ function HomePage() {
       } catch {
         // no focus data
       }
+      try {
+        const reminderData = await fetchReminders(userId);
+        setReminders(reminderData.reminders || []);
+      } catch {
+        // no reminders
+      }
     }
   };
 
@@ -114,6 +121,23 @@ function HomePage() {
             <p className="text-xs text-muted-foreground">基于间隔重复算法，现在复习效果最好</p>
           </div>
         </button>
+      )}
+
+      {reminders.length > 0 && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 flex items-center gap-3">
+          <Bell className="h-5 w-5 text-amber-500 shrink-0" />
+          <div className="flex-1">
+            {reminders.map((r) => (
+              <p key={r.type} className="text-sm">{r.title}</p>
+            ))}
+          </div>
+          <button
+            onClick={() => navigate(reminders[0].action)}
+            className="text-sm text-primary hover:underline shrink-0"
+          >
+            去处理
+          </button>
+        </div>
       )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
