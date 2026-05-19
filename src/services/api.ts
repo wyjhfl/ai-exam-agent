@@ -244,7 +244,7 @@ export function getExportUrl(userId: number, type: "wrong-questions" | "study-su
   return `${baseURL}/api/export/${userId}/${type}`;
 }
 
-export const APP_VERSION = "0.5.0";
+export const APP_VERSION = "0.6.0";
 
 export async function uploadFile(userId: number, subject: string, fileType: string, file: File, onProgress?: (pct: number) => void) {
   const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";

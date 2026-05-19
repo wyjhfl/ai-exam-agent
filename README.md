@@ -2,7 +2,7 @@
 
 AI 驱动的考研备考桌面应用，基于 Tauri 2.0 + React + Python FastAPI 构建，支持政治/英语/数学三科备考。
 
-**当前版本：v0.5.0**
+**当前版本：v0.6.0**
 
 ## 功能概览
 
@@ -90,6 +90,9 @@ ai-exam-agent/
 │   │   ├── knowledge_points.py # 知识点体系
 │   │   ├── resources.py    # 在线资源搜索
 │   │   ├── reminders.py    # 学习提醒
+│   │   ├── search.py       # 全局搜索
+│   │   ├── settings.py     # 用户 LLM 配置
+│   │   ├── streak.py       # 学习打卡
 │   │   └── exception_handler.py  # 统一异常处理
 │   ├── core/               # AI 核心逻辑
 │   │   ├── llm.py          # LLM 调用封装
@@ -280,6 +283,16 @@ SQLite 本地数据库，包含以下表：
 - `mock_exams` — 模拟考试记录
 
 ## 更新日志
+
+### v0.6.0
+
+- 模拟考试历史记录与回顾
+- 全局搜索（Ctrl+K），支持搜索题目、对话、资料
+- 学习打卡连续天数追踪
+- 用户自定义 LLM API 配置（支持 OpenAI 兼容接口）
+- 代码质量优化：PyPDF2→pypdf、pydantic ConfigDict 迁移
+- 修复错题本 N+1 查询问题
+- 补充 settings/streak/search 测试
 
 ### v0.5.0
 

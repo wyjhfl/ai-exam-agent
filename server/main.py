@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down AI Exam Agent server")
 
 
-app = FastAPI(title="AI Exam Agent", version="0.5.0", lifespan=lifespan)
+app = FastAPI(title="AI Exam Agent", version="0.6.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -69,4 +69,4 @@ app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "version": "0.5.0"}
+    return {"status": "ok", "version": "0.6.0"}
