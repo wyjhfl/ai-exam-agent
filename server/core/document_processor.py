@@ -1,8 +1,6 @@
 import os
 import logging
 from pathlib import Path
-from pypdf import PdfReader
-from docx import Document
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +25,7 @@ class DocumentProcessor:
 
     @staticmethod
     def _extract_pdf(file_path: str) -> str:
+        from pypdf import PdfReader
         text_parts = []
         try:
             reader = PdfReader(file_path)
@@ -41,6 +40,7 @@ class DocumentProcessor:
 
     @staticmethod
     def _extract_docx(file_path: str) -> str:
+        from docx import Document
         text_parts = []
         try:
             doc = Document(file_path)
