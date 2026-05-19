@@ -30,10 +30,10 @@ jobs:
           pip install -r requirements-ci.txt
       - run: |
           cd server
-          python -c "import sys; sys.path.insert(0, '.'); from main import app; print('Import OK')"
-      - run: |
-          cd server
-          python -m pytest tests/ -v --tb=long 2>&1 || true
-      - run: |
-          cd server
-          python -m pytest tests/ -v --tb=long
+          python -m pytest tests/ -v --tb=long 2>&1 | tee pytest-output.txt
+      - name: Upload pytest output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-output
+          path: server/pytest-output.txt
