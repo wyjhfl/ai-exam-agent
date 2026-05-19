@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Loader2, RefreshCw, ChevronDown, ChevronUp, BookOpen } from "lucide-react";
 import { generatePlan, fetchPlan, generateStudyPlanFromMaterials } from "@/services/api";
 import { useUserStore } from "@/stores/userStore";
+import { formatMarkdown } from "@/lib/format";
 import { toast } from "sonner";
 
 interface PlanData {
@@ -286,19 +287,3 @@ function PlanPage() {
 }
 
 export default PlanPage;
-
-function formatMarkdown(text: string): string {
-  let html = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, "<pre><code>$2</code></pre>");
-  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
-  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-  html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
-  html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>");
-  html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>");
-  html = html.replace(/^# (.+)$/gm, "<h1>$1</h1>");
-  html = html.replace(/\n/g, "<br/>");
-  return html;
-}

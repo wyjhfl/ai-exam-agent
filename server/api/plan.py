@@ -19,6 +19,8 @@ async def generate_plan(request: PlanGenerateRequest, session: AsyncSession = De
         target_major=request.target_major,
         exam_date=request.exam_date,
         subjects=request.subjects,
+        user_id=request.user_id,
+        session=session,
     )
 
     existing = await session.execute(

@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster, toast } from "sonner";
-import { useEffect, lazy, Suspense } from "react";
+import { useEffect, lazy, Suspense, useState } from "react";
 import Sidebar from "@/components/layout/Sidebar";
+import SearchModal from "@/components/SearchModal";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useUserStore } from "@/stores/userStore";
 import { useChatStore } from "@/stores/chatStore";
@@ -19,6 +20,7 @@ const MaterialsPage = lazy(() => import("@/pages/MaterialsPage"));
 const CommunityPage = lazy(() => import("@/pages/CommunityPage"));
 const KnowledgePage = lazy(() => import("@/pages/KnowledgePage"));
 const WeeklyReportPage = lazy(() => import("@/pages/WeeklyReportPage"));
+const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
 
 function PageLoader() {
   return (
@@ -32,6 +34,7 @@ function App() {
   const { restoreSession, isLoggedIn } = useUserStore();
   const userId = useUserStore((s) => s.userId);
   const { setUserId } = useChatStore();
+  const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
     restoreSession();
@@ -51,12 +54,23 @@ function App() {
     }
   }, [isLoggedIn]);
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   return (
     <BrowserRouter>
       <div className="flex h-screen overflow-hidden bg-background text-foreground">
         {isLoggedIn ? (
           <>
-            <Sidebar />
+            <Sidebar onOpenSearch={() => setSearchOpen(true)} />
             <main className="flex-1 overflow-hidden">
               <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
@@ -72,6 +86,7 @@ function App() {
                   <Route path="/community" element={<CommunityPage />} />
                   <Route path="/knowledge" element={<KnowledgePage />} />
                   <Route path="/weekly-report" element={<WeeklyReportPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
                 </Routes>
               </Suspense>
               </ErrorBoundary>
@@ -81,6 +96,7 @@ function App() {
           <LoginForm />
         )}
       </div>
+      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
       <Toaster richColors position="top-right" />
     </BrowserRouter>
   );

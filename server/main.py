@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from api import chat, quiz, plan, user, knowledge, analysis, writing, focus, export, uploads, guidance, sync, community, knowledge_points, resources, reminders
+from api import chat, quiz, plan, user, knowledge, analysis, writing, focus, export, uploads, guidance, sync, community, knowledge_points, resources, reminders, search, streak, settings
 from api.exception_handler import generic_exception_handler, validation_exception_handler, http_exception_handler
 from db.database import init_db
 from core.logger import setup_logging
@@ -62,6 +62,9 @@ app.include_router(community.router, prefix="/api/community", tags=["community"]
 app.include_router(knowledge_points.router, prefix="/api/knowledge-points", tags=["knowledge-points"])
 app.include_router(resources.router, prefix="/api/resources", tags=["resources"])
 app.include_router(reminders.router, prefix="/api/reminders", tags=["reminders"])
+app.include_router(search.router, prefix="/api/search", tags=["search"])
+app.include_router(streak.router, prefix="/api/streak", tags=["streak"])
+app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 
 
 @app.get("/api/health")

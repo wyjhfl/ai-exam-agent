@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Float, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Float, JSON, ForeignKey, Date
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from db.database import Base
@@ -13,6 +13,9 @@ class User(Base):
     target_school = Column(String(200))
     target_major = Column(String(200))
     exam_date = Column(String(20))
+    llm_api_key = Column(String(255), nullable=True)
+    llm_base_url = Column(String(500), nullable=True)
+    llm_model = Column(String(100), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -160,6 +163,20 @@ class UserUpload(Base):
     file_size = Column(Integer, default=0)
     indexed = Column(Boolean, default=False)
     created_at = Column(DateTime, server_default=func.now())
+
+    user = relationship("User")
+
+
+class StudyStreak(Base):
+    __tablename__ = "study_streaks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
+    streak_days = Column(Integer, default=0)
+    last_checkin_date = Column(Date, nullable=True)
+    max_streak = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     user = relationship("User")
 

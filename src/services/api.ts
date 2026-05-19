@@ -410,8 +410,48 @@ export async function fetchWeakPoints(userId: number) {
   return data;
 }
 
+export async function fetchMockExamHistory(userId: number, limit: number = 10) {
+  const { data } = await api.get(`/api/quiz/mock-exam/history/${userId}`, { params: { limit } });
+  return data;
+}
+
 export async function fetchWeeklyReport(userId: number) {
   const { data } = await api.get(`/api/analysis/${userId}/weekly-report`);
+  return data;
+}
+
+export async function globalSearch(userId: number, query: string, type: string = "all", page: number = 1) {
+  const { data } = await api.get(`/api/search/${userId}`, { params: { q: query, type, page } });
+  return data;
+}
+
+export async function checkIn(userId: number) {
+  const { data } = await api.post(`/api/streak/${userId}/checkin`);
+  return data;
+}
+
+export async function fetchStreak(userId: number) {
+  const { data } = await api.get(`/api/streak/${userId}`);
+  return data;
+}
+
+export async function fetchLLMConfig(userId: number) {
+  const { data } = await api.get(`/api/settings/${userId}/llm`);
+  return data;
+}
+
+export async function updateLLMConfig(userId: number, config: { api_key?: string; base_url?: string; model?: string }) {
+  const { data } = await api.put(`/api/settings/${userId}/llm`, config);
+  return data;
+}
+
+export async function testLLMConfig(userId: number) {
+  const { data } = await api.post(`/api/settings/${userId}/llm/test`);
+  return data;
+}
+
+export async function resetLLMConfig(userId: number) {
+  const { data } = await api.delete(`/api/settings/${userId}/llm`);
   return data;
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { CheckCircle, XCircle, BookOpen, Brain, Sparkles, Loader2, Download, Share2, Timer, Zap, FileText } from "lucide-react";
-import { fetchQuestions, submitAnswer, fetchWrongQuestions, markWrongMastered, fetchReviewQuestions, submitReviewAnswer, generateQuizQuestions, fetchMoreQuestions, getExportUrl, shareWrongToCommunity, startMockExam, submitMockExam, fetchAdaptiveQuestions, fetchWeakPoints } from "@/services/api";
+import { CheckCircle, XCircle, BookOpen, Brain, Sparkles, Loader2, Download, Share2, Timer, Zap, FileText, History } from "lucide-react";
+import { fetchQuestions, submitAnswer, fetchWrongQuestions, markWrongMastered, fetchReviewQuestions, submitReviewAnswer, generateQuizQuestions, fetchMoreQuestions, getExportUrl, shareWrongToCommunity, startMockExam, submitMockExam, fetchAdaptiveQuestions, fetchWeakPoints, fetchMockExamHistory } from "@/services/api";
 import { useUserStore } from "@/stores/userStore";
 import { renderLatex } from "@/lib/format";
 import { toast } from "sonner";
@@ -64,6 +64,7 @@ function QuizPage() {
   const [weakPoints, setWeakPoints] = useState<WeakPoint[]>([]);
   const [adaptiveLoading, setAdaptiveLoading] = useState(false);
   const [adaptiveResult, setAdaptiveResult] = useState<{ correct: number; total: number } | null>(null);
+  const [mockExamHistory, setMockExamHistory] = useState<any[]>([]);
 
   const subjects = ["全部", "政治", "英语", "数学"];
 
@@ -342,6 +343,16 @@ function QuizPage() {
     setAdaptiveLoading(false);
   };
 
+  const loadMockExamHistory = async () => {
+    if (!userId) return;
+    try {
+      const data = await fetchMockExamHistory(userId);
+      setMockExamHistory(data);
+    } catch {
+      // ignore
+    }
+  };
+
   if (mode === "mock" && mockExamState === "setup") {
     return (
       <div className="flex flex-col h-full p-4 md:p-6 space-y-4 overflow-y-auto">
@@ -382,6 +393,34 @@ function QuizPage() {
             {mockSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Timer className="h-4 w-4" />}
             {mockSubmitting ? "生成题目中..." : "开始考试"}
           </button>
+        </div>
+
+        <div className="rounded-lg border border-border p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <History className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-medium">历史成绩</h3>
+          </div>
+          {mockExamHistory.length === 0 ? (
+            <p className="text-sm text-muted-foreground">暂无考试记录</p>
+          ) : (
+            <div className="space-y-2">
+              {mockExamHistory.map((exam) => (
+                <div key={exam.exam_id} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
+                  <div className="flex items-center gap-3">
+                    <span className="text-muted-foreground">{exam.created_at ? new Date(exam.created_at).toLocaleDateString() : "-"}</span>
+                    <span className="font-medium">{exam.subject}</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span>{exam.correct_count}/{exam.question_count}</span>
+                    <span className={`font-medium ${exam.accuracy >= 70 ? "text-green-600 dark:text-green-400" : exam.accuracy >= 40 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`}>
+                      {exam.accuracy}%
+                    </span>
+                    <span className="text-muted-foreground">{Math.floor(exam.duration / 60)}分{exam.duration % 60}秒</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -480,7 +519,7 @@ function QuizPage() {
         </div>
 
         <button
-          onClick={() => { setMockExamState("setup"); setMockResult(null); setMockQuestions([]); }}
+          onClick={() => { setMockExamState("setup"); setMockResult(null); setMockQuestions([]); loadMockExamHistory(); }}
           className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90"
         >
           再考一次
@@ -499,6 +538,7 @@ function QuizPage() {
               if (m.key === "mock") {
                 setMode("mock");
                 setMockExamState("setup");
+                loadMockExamHistory();
               } else {
                 setMode(m.key);
                 setMockExamState(null);

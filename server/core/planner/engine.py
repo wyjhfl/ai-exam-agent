@@ -1,6 +1,6 @@
 import json
 import logging
-from core.llm import chat_completion_sync, is_configured
+from core.llm import chat_completion_sync, chat_completion_for_user, is_configured
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +40,10 @@ class PlanningEngine:
         target_major: str,
         exam_date: str,
         subjects: dict[str, int],
+        user_id: int = None,
+        session = None,
     ) -> dict:
-        if not is_configured():
+        if not is_configured() and not (user_id and session):
             return self._fallback_plan(target_school, target_major, subjects)
 
         prompt = PLAN_PROMPT.format(
@@ -53,7 +55,10 @@ class PlanningEngine:
 
         try:
             messages = [{"role": "user", "content": prompt}]
-            response_text = chat_completion_sync(messages)
+            if user_id and session:
+                response_text = await chat_completion_for_user(messages, user_id, session)
+            else:
+                response_text = chat_completion_sync(messages)
             plan_data = self._parse_json_response(response_text)
             if plan_data:
                 return plan_data

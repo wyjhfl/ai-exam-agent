@@ -7,7 +7,7 @@ from sqlalchemy import select
 from db.database import get_session, async_session
 from db.models import ChatHistory
 from models.schemas import ChatRequest, ChatResponse
-from core.llm import chat_completion_sync, chat_completion_stream
+from core.llm import chat_completion_sync, chat_completion_stream, chat_completion_for_user, chat_completion_stream_for_user
 from core.rag.engine import RAGEngine
 from core.guided_tutor import GuidedTutor
 
@@ -47,7 +47,7 @@ async def send_message(request: ChatRequest, session: AsyncSession = Depends(get
         logger.warning(f"RAG search failed: {e}")
 
     try:
-        ai_content = chat_completion_sync(history_msgs)
+        ai_content = await chat_completion_for_user(history_msgs, request.user_id, session)
     except Exception as e:
         logger.error(f"LLM call failed: {e}")
         ai_content = f"⚠️ LLM 调用失败：{str(e)}"
@@ -107,7 +107,7 @@ async def stream_message(request: ChatRequest, background_tasks: BackgroundTasks
 
         full_content = []
         try:
-            for chunk in chat_completion_stream(history_msgs):
+            async for chunk in chat_completion_stream_for_user(history_msgs, request.user_id, session):
                 full_content.append(chunk)
                 data = json.dumps({"type": "content", "content": chunk}, ensure_ascii=False)
                 yield f"data: {data}\n\n"

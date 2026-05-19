@@ -172,6 +172,7 @@ async def generate_from_url(request: dict, session: AsyncSession = Depends(get_s
     subject = request.get("subject", "数学")
     question_type = request.get("question_type", "single_choice")
     count = min(request.get("count", 5), 10)
+    user_id = request.get("user_id")
 
     if not url:
         return {"error": "url is required"}
@@ -204,6 +205,8 @@ async def generate_from_url(request: dict, session: AsyncSession = Depends(get_s
         difficulty="medium",
         count=count,
         question_type=question_type,
+        user_id=user_id,
+        session=session,
     )
 
     if not questions:

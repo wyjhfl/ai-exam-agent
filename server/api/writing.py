@@ -21,7 +21,7 @@ async def evaluate_writing(request: dict, session: AsyncSession = Depends(get_se
     if not text or len(text.strip()) < 50:
         raise HTTPException(status_code=400, detail="作文内容太短，至少需要50字")
 
-    result = await evaluator.evaluate_essay(text, essay_type)
+    result = await evaluator.evaluate_essay(text, essay_type, user_id=user_id, session=session)
 
     history = ChatHistory(
         user_id=user_id,

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case
 from db.database import get_session
 from db.models import QuizRecord, WrongQuestion, StudySession, QuizQuestion, User
-from core.llm import chat_completion_sync, is_configured
+from core.llm import chat_completion_sync, chat_completion_for_user, is_configured
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -263,7 +263,7 @@ async def get_weekly_report(user_id: int, session: AsyncSession = Depends(get_se
 请严格按以下格式输出（每行一个字段，用|||分隔）：
 一句话总结|||建议1|||建议2|||建议3|||下周重点复习方向"""
         try:
-            llm_response = chat_completion_sync([{"role": "user", "content": prompt}])
+            llm_response = await chat_completion_for_user([{"role": "user", "content": prompt}], user_id, session)
             parts = llm_response.split("|||")
             if len(parts) >= 5:
                 summary = parts[0].strip()

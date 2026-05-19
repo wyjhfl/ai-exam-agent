@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, MessageSquare, BookMarked, BarChart3, Clock, Target, AlertCircle, Brain, Timer, ChevronDown, ChevronUp, Bell } from "lucide-react";
-import { fetchKnowledgeStatus, indexKnowledgeBase, reindexKnowledgeBase, fetchAnalysisOverview, fetchHistory, fetchReviewQuestions, fetchTodayFocus, fetchReminders } from "@/services/api";
+import { BookOpen, MessageSquare, BookMarked, BarChart3, Clock, Target, AlertCircle, Brain, Timer, ChevronDown, ChevronUp, Bell, Flame, CheckCircle } from "lucide-react";
+import { fetchKnowledgeStatus, indexKnowledgeBase, reindexKnowledgeBase, fetchAnalysisOverview, fetchHistory, fetchReviewQuestions, fetchTodayFocus, fetchReminders, checkIn, fetchStreak } from "@/services/api";
 import { useUserStore } from "@/stores/userStore";
 import { toast } from "sonner";
 
@@ -36,6 +36,10 @@ function HomePage() {
   const [todayFocusMinutes, setTodayFocusMinutes] = useState(0);
   const [showFiles, setShowFiles] = useState(false);
   const [reminders, setReminders] = useState<any[]>([]);
+  const [streakDays, setStreakDays] = useState(0);
+  const [maxStreak, setMaxStreak] = useState(0);
+  const [checkedInToday, setCheckedInToday] = useState(false);
+  const [checkingIn, setCheckingIn] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -83,6 +87,14 @@ function HomePage() {
       } catch {
         // no reminders
       }
+      try {
+        const streakData = await fetchStreak(userId);
+        setStreakDays(streakData.streak_days);
+        setMaxStreak(streakData.max_streak);
+        setCheckedInToday(streakData.checked_in_today);
+      } catch {
+        // no streak data
+      }
     }
   };
 
@@ -101,6 +113,25 @@ function HomePage() {
       toast.error("索引操作失败");
     }
     setIndexing(false);
+  };
+
+  const handleCheckIn = async () => {
+    if (!userId || checkingIn) return;
+    setCheckingIn(true);
+    try {
+      const data = await checkIn(userId);
+      setStreakDays(data.streak_days);
+      setMaxStreak(data.max_streak);
+      setCheckedInToday(true);
+      if (data.is_new_day) {
+        toast.success(`打卡成功！连续 ${data.streak_days} 天`);
+      } else {
+        toast.info("今日已打卡");
+      }
+    } catch {
+      toast.error("打卡失败");
+    }
+    setCheckingIn(false);
   };
 
   return (
@@ -145,6 +176,33 @@ function HomePage() {
         <StatCard icon={<Clock className="h-5 w-5" />} label="总学习时长" value={`${Math.round((overview?.total_study_minutes || 0) / 60)}h`} />
         <StatCard icon={<AlertCircle className="h-5 w-5" />} label="待复习错题" value={String(overview?.wrong_count || 0)} />
         <StatCard icon={<Timer className="h-5 w-5" />} label="今日专注" value={`${todayFocusMinutes}分钟`} />
+      </div>
+
+      <div className="rounded-lg border border-border p-4 flex items-center gap-4">
+        <div className="flex items-center gap-3 flex-1">
+          <div className={`rounded-full p-3 ${checkedInToday ? "bg-green-100 dark:bg-green-900/30" : "bg-orange-100 dark:bg-orange-900/30"}`}>
+            {checkedInToday ? (
+              <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+            ) : (
+              <Flame className="h-6 w-6 text-orange-500" />
+            )}
+          </div>
+          <div>
+            <p className="text-2xl font-bold">{streakDays}</p>
+            <p className="text-xs text-muted-foreground">连续打卡天数 {maxStreak > 0 ? `（最长 ${maxStreak} 天）` : ""}</p>
+          </div>
+        </div>
+        <button
+          onClick={handleCheckIn}
+          disabled={checkingIn || checkedInToday}
+          className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            checkedInToday
+              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default"
+              : "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          }`}
+        >
+          {checkedInToday ? "✅ 已打卡" : checkingIn ? "打卡中..." : "今日打卡"}
+        </button>
       </div>
 
       <div className="space-y-2">

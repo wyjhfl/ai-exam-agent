@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Home, MessageSquare, BookMarked, BookOpen, BarChart3, PenLine, Timer, Sun, Moon, Monitor, PanelLeftClose, PanelLeft, User, LogOut, RefreshCw, FolderOpen, Users, Network, ClipboardList } from "lucide-react";
+import { Home, MessageSquare, BookMarked, BookOpen, BarChart3, PenLine, Timer, Sun, Moon, Monitor, PanelLeftClose, PanelLeft, User, LogOut, RefreshCw, FolderOpen, Users, Network, ClipboardList, Search, Settings } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { useUserStore } from "@/stores/userStore";
 import { useSyncStore } from "@/stores/syncStore";
@@ -19,9 +19,10 @@ const navItems = [
   { to: "/knowledge", icon: Network, label: "知识点" },
   { to: "/community", icon: Users, label: "社区" },
   { to: "/focus", icon: Timer, label: "专注" },
+  { to: "/settings", icon: Settings, label: "设置" },
 ];
 
-function Sidebar() {
+function Sidebar({ onOpenSearch }: { onOpenSearch: () => void }) {
   const { theme, setTheme, sidebarCollapsed, toggleSidebar } = useAppStore();
   const { username, logout, userId } = useUserStore();
   const { lastSyncTime, isSyncing, syncNow } = useSyncStore();
@@ -81,6 +82,21 @@ function Sidebar() {
         {!sidebarCollapsed && <span className="text-sm font-bold">AI 考研助手</span>}
         <button onClick={toggleSidebar} className="p-1 rounded hover:bg-accent">
           {sidebarCollapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+        </button>
+      </div>
+
+      <div className="px-2 py-2">
+        <button
+          onClick={onOpenSearch}
+          className="w-full flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent transition-colors"
+        >
+          <Search className="h-4 w-4 shrink-0" />
+          {!sidebarCollapsed && (
+            <>
+              <span className="flex-1 text-left">搜索...</span>
+              <kbd className="text-xs bg-muted px-1.5 py-0.5 rounded">⌘K</kbd>
+            </>
+          )}
         </button>
       </div>
 

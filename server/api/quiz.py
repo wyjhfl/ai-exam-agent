@@ -9,14 +9,14 @@ from db.models import QuizQuestion, QuizRecord, WrongQuestion, MockExam
 from models.schemas import QuizAnswerRequest, QuizAnswerResponse
 from core.quiz.engine import QuizEngine
 from core.spaced_repetition import get_due_reviews, record_review
-from core.llm import chat_completion_sync
+from core.llm import chat_completion_sync, chat_completion_for_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 quiz_engine = QuizEngine()
 
 
-async def _grade_short_answer(question_text: str, reference_answer: str, user_answer: str) -> dict:
+async def _grade_short_answer(question_text: str, reference_answer: str, user_answer: str, user_id: int = None, session: AsyncSession = None) -> dict:
     prompt = f"""请判断以下简答题的答案是否正确。
 
 题目：{question_text}
@@ -26,7 +26,10 @@ async def _grade_short_answer(question_text: str, reference_answer: str, user_an
 请以JSON返回：{{"is_correct": true或false, "score": 0到100的整数, "feedback": "评价"}}
 只返回JSON，不要其他内容。"""
     try:
-        response = chat_completion_sync([{"role": "user", "content": prompt}])
+        if user_id and session:
+            response = await chat_completion_for_user([{"role": "user", "content": prompt}], user_id, session)
+        else:
+            response = chat_completion_sync([{"role": "user", "content": prompt}])
         text = response.strip()
         if text.startswith("```"):
             import re
@@ -66,6 +69,7 @@ async def get_questions(
     limit: int = 20,
     generate: bool = False,
     count: int = 5,
+    user_id: int = None,
     session: AsyncSession = Depends(get_session),
 ):
     query = select(QuizQuestion)
@@ -82,6 +86,8 @@ async def get_questions(
             subject=subject or "数学",
             difficulty=difficulty or "medium",
             count=needed,
+            user_id=user_id,
+            session=session,
         )
         for q_data in new_questions:
             q = QuizQuestion(
@@ -143,9 +149,11 @@ async def generate_questions(request: dict, session: AsyncSession = Depends(get_
     difficulty = request.get("difficulty", "medium")
     count = min(request.get("count", 5), 10)
     question_type = request.get("question_type", "single_choice")
+    user_id = request.get("user_id")
 
     new_questions = await quiz_engine.generate_questions(
-        subject=subject, topic=topic, difficulty=difficulty, count=count, question_type=question_type
+        subject=subject, topic=topic, difficulty=difficulty, count=count, question_type=question_type,
+        user_id=user_id, session=session,
     )
     if not new_questions:
         raise HTTPException(status_code=500, detail="AI 题目生成失败，请稍后重试")
@@ -246,7 +254,7 @@ async def submit_answer(request: QuizAnswerRequest, session: AsyncSession = Depe
     qt = question.question_type or "single_choice"
 
     if qt == "short_answer":
-        grade = await _grade_short_answer(question.question_text, question.answer, request.selected_answer)
+        grade = await _grade_short_answer(question.question_text, question.answer, request.selected_answer, request.user_id, session)
         is_correct = grade["is_correct"]
     else:
         is_correct = _check_answer(qt, request.selected_answer, question.answer)
@@ -286,26 +294,25 @@ async def submit_answer(request: QuizAnswerRequest, session: AsyncSession = Depe
 @router.get("/wrong/{user_id}")
 async def get_wrong_questions(user_id: int, session: AsyncSession = Depends(get_session)):
     result = await session.execute(
-        select(WrongQuestion).where(WrongQuestion.user_id == user_id, WrongQuestion.mastered == False)
+        select(WrongQuestion, QuizQuestion)
+        .join(QuizQuestion, WrongQuestion.question_id == QuizQuestion.id)
+        .where(WrongQuestion.user_id == user_id, WrongQuestion.mastered == False)
     )
-    wrongs = result.scalars().all()
+    rows = result.all()
     items = []
-    for w in wrongs:
-        q_result = await session.execute(select(QuizQuestion).where(QuizQuestion.id == w.question_id))
-        q = q_result.scalar_one_or_none()
-        if q:
-            items.append({
-                "wrong_id": w.id,
-                "question_id": q.id,
-                "subject": q.subject,
-                "question_text": q.question_text,
-                "question_type": q.question_type or "single_choice",
-                "options": q.options or [],
-                "answer": q.answer,
-                "explanation": q.explanation,
-                "difficulty": q.difficulty,
-                "mastered": w.mastered,
-            })
+    for w, q in rows:
+        items.append({
+            "wrong_id": w.id,
+            "question_id": q.id,
+            "subject": q.subject,
+            "question_text": q.question_text,
+            "question_type": q.question_type or "single_choice",
+            "options": q.options or [],
+            "answer": q.answer,
+            "explanation": q.explanation,
+            "difficulty": q.difficulty,
+            "mastered": w.mastered,
+        })
     return items
 
 
@@ -345,7 +352,8 @@ async def start_mock_exam(request: dict, session: AsyncSession = Depends(get_ses
         raise HTTPException(status_code=400, detail="user_id is required")
 
     new_questions = await quiz_engine.generate_questions(
-        subject=subject, difficulty="medium", count=question_count
+        subject=subject, difficulty="medium", count=question_count,
+        user_id=user_id, session=session,
     )
     if not new_questions:
         raise HTTPException(status_code=500, detail="AI 题目生成失败，请稍后重试")
@@ -403,6 +411,31 @@ async def start_mock_exam(request: dict, session: AsyncSession = Depends(get_ses
     }
 
 
+@router.get("/mock-exam/history/{user_id}")
+async def get_mock_exam_history(user_id: int, limit: int = 10, session: AsyncSession = Depends(get_session)):
+    result = await session.execute(
+        select(MockExam)
+        .where(MockExam.user_id == user_id)
+        .order_by(MockExam.created_at.desc())
+        .limit(limit)
+    )
+    exams = result.scalars().all()
+    return [
+        {
+            "exam_id": e.id,
+            "subject": e.subject,
+            "total_score": e.total_score,
+            "max_score": e.max_score,
+            "accuracy": round(e.correct_count / e.question_count * 100, 1) if e.question_count > 0 else 0,
+            "duration": e.duration,
+            "question_count": e.question_count,
+            "correct_count": e.correct_count,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in exams
+    ]
+
+
 @router.post("/mock-exam/{exam_id}/submit")
 async def submit_mock_exam(exam_id: int, request: dict, session: AsyncSession = Depends(get_session)):
     answers = request.get("answers", [])
@@ -427,7 +460,7 @@ async def submit_mock_exam(exam_id: int, request: dict, session: AsyncSession = 
 
         qt = question.question_type or "single_choice"
         if qt == "short_answer":
-            grade = await _grade_short_answer(question.question_text, question.answer, selected)
+            grade = await _grade_short_answer(question.question_text, question.answer, selected, mock_exam.user_id, session)
             is_correct = grade["is_correct"]
         else:
             is_correct = _check_answer(qt, selected, question.answer)

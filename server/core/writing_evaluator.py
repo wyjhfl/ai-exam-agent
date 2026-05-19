@@ -1,19 +1,19 @@
 import json
 import re
 import logging
-from core.llm import chat_completion_sync
+from core.llm import chat_completion_sync, chat_completion_for_user
 
 logger = logging.getLogger(__name__)
 
 
 class WritingEvaluator:
-    async def evaluate_essay(self, essay_text: str, essay_type: str = "english_writing") -> dict:
+    async def evaluate_essay(self, essay_text: str, essay_type: str = "english_writing", user_id: int = None, session = None) -> dict:
         if essay_type == "english_writing":
-            return await self._evaluate_english(essay_text)
+            return await self._evaluate_english(essay_text, user_id, session)
         else:
-            return await self._evaluate_politics(essay_text)
+            return await self._evaluate_politics(essay_text, user_id, session)
 
-    async def _evaluate_english(self, text: str) -> dict:
+    async def _evaluate_english(self, text: str, user_id: int = None, session = None) -> dict:
         prompt = f"""你是一个专业的考研英语作文批改专家。请对以下英语作文进行详细批改。
 
 作文内容：
@@ -33,9 +33,9 @@ class WritingEvaluator:
   "improved_version": "改进后的完整作文"
 }}"""
 
-        return await self._call_llm(prompt, 20)
+        return await self._call_llm(prompt, 20, user_id, session)
 
-    async def _evaluate_politics(self, text: str) -> dict:
+    async def _evaluate_politics(self, text: str, user_id: int = None, session = None) -> dict:
         prompt = f"""你是一个专业的考研政治论述题批改专家。请对以下政治论述进行详细批改。
 
 论述内容：
@@ -55,12 +55,15 @@ class WritingEvaluator:
   "improved_version": "改进后的完整论述"
 }}"""
 
-        return await self._call_llm(prompt, 10)
+        return await self._call_llm(prompt, 10, user_id, session)
 
-    async def _call_llm(self, prompt: str, max_score: int) -> dict:
+    async def _call_llm(self, prompt: str, max_score: int, user_id: int = None, session = None) -> dict:
         try:
             messages = [{"role": "user", "content": prompt}]
-            response = chat_completion_sync(messages)
+            if user_id and session:
+                response = await chat_completion_for_user(messages, user_id, session)
+            else:
+                response = chat_completion_sync(messages)
             return self._parse_response(response, max_score)
         except Exception as e:
             logger.error(f"Writing evaluation failed: {e}")

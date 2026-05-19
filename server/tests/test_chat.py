@@ -5,7 +5,7 @@ from httpx import AsyncClient
 
 @pytest.mark.asyncio
 async def test_send_message(client: AsyncClient):
-    with patch("api.chat.chat_completion_sync", return_value="这是AI的回复"):
+    with patch("api.chat.chat_completion_for_user", return_value="这是AI的回复"):
         with patch("api.chat.rag_engine.search", return_value=[]):
             response = await client.post("/api/chat/message", json={
                 "message": "你好",
@@ -19,7 +19,7 @@ async def test_send_message(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_get_history(client: AsyncClient):
-    with patch("api.chat.chat_completion_sync", return_value="AI回复"):
+    with patch("api.chat.chat_completion_for_user", return_value="AI回复"):
         with patch("api.chat.rag_engine.search", return_value=[]):
             await client.post("/api/chat/message", json={
                 "message": "测试消息",
@@ -35,11 +35,11 @@ async def test_get_history(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_stream(client: AsyncClient):
-    def mock_stream(messages):
+    async def mock_stream(messages, user_id, session):
         yield "你"
         yield "好"
 
-    with patch("api.chat.chat_completion_stream", side_effect=mock_stream):
+    with patch("api.chat.chat_completion_stream_for_user", side_effect=mock_stream):
         with patch("api.chat.rag_engine.search", return_value=[]):
             response = await client.post("/api/chat/stream", json={
                 "message": "你好",

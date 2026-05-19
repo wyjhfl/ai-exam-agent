@@ -4,7 +4,7 @@ import logging
 from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.models import QuizRecord, QuizQuestion, WrongQuestion
-from core.llm import chat_completion_sync
+from core.llm import chat_completion_sync, chat_completion_for_user
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +25,16 @@ class QuizEngine:
         difficulty: str = "medium",
         count: int = 5,
         question_type: str = "single_choice",
+        user_id: int = None,
+        session: AsyncSession = None,
     ) -> list[dict]:
         prompt = self._build_prompt(subject, topic, difficulty, count, question_type)
         messages = [{"role": "user", "content": prompt}]
         try:
-            response = chat_completion_sync(messages)
+            if user_id and session:
+                response = await chat_completion_for_user(messages, user_id, session)
+            else:
+                response = chat_completion_sync(messages)
             return self._parse_response(response, question_type)
         except Exception as e:
             logger.error(f"Failed to generate questions: {e}")
@@ -48,6 +53,8 @@ class QuizEngine:
                 subject=subject or "数学",
                 difficulty="medium",
                 count=count,
+                user_id=user_id,
+                session=session,
             )
 
         topic_str = "、".join(weak_topics[:5])
@@ -77,7 +84,10 @@ class QuizEngine:
 
         messages = [{"role": "user", "content": prompt}]
         try:
-            response = chat_completion_sync(messages)
+            if user_id and session:
+                response = await chat_completion_for_user(messages, user_id, session)
+            else:
+                response = chat_completion_sync(messages)
             return self._parse_response(response, "single_choice")
         except Exception as e:
             logger.error(f"Failed to generate adaptive questions: {e}")
