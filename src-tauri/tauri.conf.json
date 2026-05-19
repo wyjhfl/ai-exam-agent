@@ -18,11 +18,12 @@
         "minWidth": 800,
         "minHeight": 600,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "additionalBrowserArgs": "--disable-web-security --allow-running-insecure-content"
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval' data:; connect-src * http: https:; img-src * data:; font-src * data:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval'"
     }
   },
   "bundle": {
@@ -33,11 +34,6 @@
       "nsis": {
         "installMode": "both"
       }
-    }
-  },
-  "plugins": {
-    "updater": {
-      "active": false
     }
   }
 }
