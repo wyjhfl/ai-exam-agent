@@ -11,7 +11,6 @@ from core.quiz.engine import QuizEngine
 from core.rag.engine import RAGEngine
 
 import httpx
-from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -38,6 +37,7 @@ async def search_resources(query: str, subject: str = None, resource_type: str =
         logger.error(f"Search request failed: {e}")
         return {"results": [], "total": 0, "error": "搜索请求失败"}
 
+    from bs4 import BeautifulSoup
     soup = BeautifulSoup(resp.text, "html.parser")
     results = []
 

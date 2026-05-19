@@ -3,7 +3,6 @@ import re
 import json
 import logging
 from pathlib import Path
-import chromadb
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +21,7 @@ class RAGEngine:
 
     def _get_collection(self):
         if self._collection is None:
+            import chromadb
             persist_dir = Path(CHROMA_PERSIST_DIR)
             persist_dir.mkdir(parents=True, exist_ok=True)
             self._client = chromadb.PersistentClient(path=str(persist_dir))
