@@ -48,9 +48,11 @@ class StudyGuide:
         if source_files:
             source_hint = f"\n\n参考来源：{', '.join(source_files)}"
 
+        context_ref = f"参考学生上传的教辅资料内容：\n\n{context}" if context else "请基于考研大纲进行讲解"
+
         prompt = f"""你是一位考研辅导专家，请详细讲解以下知识点：{topic}
 
-{f"参考学生上传的教辅资料内容：\n\n{context}" if context else "请基于考研大纲进行讲解"}
+{context_ref}
 
 要求：
 1. 先给出核心定义和概念
@@ -79,11 +81,13 @@ class StudyGuide:
         if source_files:
             source_hint = f"\n\n参考来源：{', '.join(source_files)}"
 
+        context_ref = f"参考学生上传的教辅资料中的相关内容：\n\n{context}" if context else ""
+
         prompt = f"""你是一位考研辅导专家，请解答以下题目：
 
 {question_text}
 
-{f"参考学生上传的教辅资料中的相关内容：\n\n{context}" if context else ""}
+{context_ref}
 
 要求：
 1. 先分析题目考查的知识点

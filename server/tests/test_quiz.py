@@ -1,77 +1,85 @@
 import pytest
-from httpx import AsyncClient
 from db.models import QuizQuestion
 
 
 @pytest.mark.asyncio
-async def test_get_questions(client: AsyncClient):
-    response = await client.get("/api/quiz/questions")
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, list)
+async def test_get_questions_empty(client):
+    resp = await client.get("/api/quiz/questions")
+    assert resp.status_code == 200
+    assert resp.json() == []
 
 
 @pytest.mark.asyncio
-async def test_submit_correct_answer(client: AsyncClient, test_db):
-    async with test_db() as session:
-        q = QuizQuestion(
-            subject="math",
-            topic="测试",
-            difficulty="easy",
-            question_text="2+2=?",
-            options=["A. 3", "B. 4", "C. 5", "D. 6"],
-            answer="B",
-            explanation="2+2=4",
-        )
-        session.add(q)
-        await session.commit()
-        q_id = q.id
+async def test_submit_correct_answer(client, db_session):
+    q = QuizQuestion(
+        subject="数学",
+        topic="极限",
+        difficulty="easy",
+        question_text="1+1=?",
+        question_type="single_choice",
+        options=["1", "2", "3", "4"],
+        answer="B",
+        explanation="简单加法",
+    )
+    db_session.add(q)
+    await db_session.commit()
+    await db_session.refresh(q)
+    question_id = q.id
 
-    response = await client.post("/api/quiz/answer", json={
-        "user_id": 1,
-        "question_id": q_id,
+    user_resp = await client.post("/api/user/create", json={"username": "answer_user"})
+    assert user_resp.status_code == 200
+    user_id = user_resp.json()["id"]
+
+    resp = await client.post("/api/quiz/answer", json={
+        "user_id": user_id,
+        "question_id": question_id,
         "selected_answer": "B",
     })
-    assert response.status_code == 200
-    data = response.json()
-    assert data["is_correct"] is True
-    assert data["correct_answer"] == "B"
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    assert resp.json()["is_correct"] is True
+    assert resp.json()["correct_answer"] == "B"
 
 
 @pytest.mark.asyncio
-async def test_submit_wrong_answer(client: AsyncClient, test_db):
-    async with test_db() as session:
-        q = QuizQuestion(
-            subject="math",
-            topic="测试",
-            difficulty="easy",
-            question_text="3+3=?",
-            options=["A. 5", "B. 6", "C. 7", "D. 8"],
-            answer="B",
-            explanation="3+3=6",
-        )
-        session.add(q)
-        await session.commit()
-        q_id = q.id
+async def test_submit_wrong_answer(client, db_session):
+    q = QuizQuestion(
+        subject="数学",
+        topic="极限",
+        difficulty="easy",
+        question_text="1+1=?",
+        question_type="single_choice",
+        options=["1", "2", "3", "4"],
+        answer="B",
+        explanation="",
+    )
+    db_session.add(q)
+    await db_session.commit()
+    await db_session.refresh(q)
+    question_id = q.id
 
-    response = await client.post("/api/quiz/answer", json={
-        "user_id": 1,
-        "question_id": q_id,
+    user_resp = await client.post("/api/user/create", json={"username": "wrong_user"})
+    assert user_resp.status_code == 200
+    user_id = user_resp.json()["id"]
+
+    resp = await client.post("/api/quiz/answer", json={
+        "user_id": user_id,
+        "question_id": question_id,
         "selected_answer": "A",
     })
-    assert response.status_code == 200
-    data = response.json()
-    assert data["is_correct"] is False
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+    assert resp.json()["is_correct"] is False
 
-    wrong_response = await client.get("/api/quiz/wrong/1")
-    assert wrong_response.status_code == 200
-    wrong_data = wrong_response.json()
-    assert any(w["question_id"] == q_id for w in wrong_data)
+    wrong_resp = await client.get(f"/api/quiz/wrong/{user_id}")
+    assert wrong_resp.status_code == 200
+    wrong_data = wrong_resp.json()
+    assert any(w["question_id"] == question_id for w in wrong_data)
 
 
 @pytest.mark.asyncio
-async def test_get_wrong_questions(client: AsyncClient):
-    response = await client.get("/api/quiz/wrong/1")
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, list)
+async def test_answer_nonexistent_question(client):
+    resp = await client.post("/api/quiz/answer", json={
+        "user_id": 1,
+        "question_id": 99999,
+        "selected_answer": "A",
+    })
+    assert resp.status_code == 404

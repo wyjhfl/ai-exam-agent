@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "ai-exam-agent",
-  "version": "0.4.0",
-  "identifier": "com.ai-exam-agent.desktop",
+  "productName": "AI考研助手",
+  "version": "0.5.0",
+  "identifier": "com.ai-exam-agent.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -27,26 +27,17 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ],
-    "android": {
-      "debugApplicationIdSuffix": ".debug"
+    "targets": ["msi", "nsis"],
+    "icon": ["icons/icon.ico"],
+    "windows": {
+      "nsis": {
+        "installMode": "both"
+      }
     }
   },
   "plugins": {
     "updater": {
-      "active": true,
-      "endpoints": [
-        "https://github.com/YOUR_USERNAME/ai-exam-agent/releases/latest/download/latest.json"
-      ],
-      "dialog": true,
-      "pubkey": ""
+      "active": false
     }
   }
 }

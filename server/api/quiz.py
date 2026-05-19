@@ -186,6 +186,56 @@ async def generate_questions(request: dict, session: AsyncSession = Depends(get_
     ]
 
 
+@router.post("/adaptive")
+async def adaptive_questions(request: dict, session: AsyncSession = Depends(get_session)):
+    user_id = request.get("user_id")
+    count = min(request.get("count", 5), 10)
+    subject = request.get("subject")
+
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id is required")
+
+    new_questions = await quiz_engine.generate_adaptive_questions(
+        user_id=user_id, session=session, count=count, subject=subject
+    )
+    if not new_questions:
+        raise HTTPException(status_code=500, detail="AI 自适应出题失败，请稍后重试")
+
+    saved = []
+    for q_data in new_questions:
+        q = QuizQuestion(
+            subject=q_data.get("subject", subject or "数学"),
+            topic=q_data.get("topic", ""),
+            difficulty=q_data.get("difficulty", "medium"),
+            question_text=q_data["question_text"],
+            question_type=q_data.get("question_type", "single_choice"),
+            options=q_data.get("options", []),
+            answer=q_data["answer"],
+            explanation=q_data.get("explanation", ""),
+            source="AI自适应",
+        )
+        session.add(q)
+        saved.append(q)
+
+    await session.commit()
+    for q in saved:
+        await session.refresh(q)
+
+    return [
+        {
+            "id": q.id,
+            "subject": q.subject,
+            "topic": q.topic,
+            "difficulty": q.difficulty,
+            "question_text": q.question_text,
+            "question_type": q.question_type or "single_choice",
+            "options": q.options or [],
+            "explanation": q.explanation or "",
+        }
+        for q in saved
+    ]
+
+
 @router.post("/answer", response_model=QuizAnswerResponse)
 async def submit_answer(request: QuizAnswerRequest, session: AsyncSession = Depends(get_session)):
     result = await session.execute(select(QuizQuestion).where(QuizQuestion.id == request.question_id))

@@ -2,7 +2,7 @@ import os
 import hashlib
 import logging
 from urllib.parse import urlparse, unquote
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from db.database import get_session

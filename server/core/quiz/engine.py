@@ -1,6 +1,9 @@
 import json
 import re
 import logging
+from sqlalchemy import select, func, case
+from sqlalchemy.ext.asyncio import AsyncSession
+from db.models import QuizRecord, QuizQuestion, WrongQuestion
 from core.llm import chat_completion_sync
 
 logger = logging.getLogger(__name__)
@@ -31,6 +34,101 @@ class QuizEngine:
         except Exception as e:
             logger.error(f"Failed to generate questions: {e}")
             return []
+
+    async def generate_adaptive_questions(
+        self,
+        user_id: int,
+        session: AsyncSession,
+        count: int = 5,
+        subject: str | None = None,
+    ) -> list[dict]:
+        weak_topics = await self._get_weak_topics(user_id, session, subject)
+        if not weak_topics:
+            return await self.generate_questions(
+                subject=subject or "数学",
+                difficulty="medium",
+                count=count,
+            )
+
+        topic_str = "、".join(weak_topics[:5])
+        prompt = f"""请为考研{subject or '数学'}生成{count}道练习题。
+重点考察以下薄弱知识点：{topic_str}
+难度：中等偏难
+题型：单选题
+
+要求：
+1. 题目要符合考研真题风格和难度
+2. 包含4个选项（A/B/C/D格式）
+3. 给出正确答案和详细解析
+4. 标注考查的知识点
+
+请以纯JSON格式返回（不要包含markdown代码块标记），格式如下：
+[
+  {{
+    "question_text": "题目内容",
+    "options": ["A. 选项1", "B. 选项2", "C. 选项3", "D. 选项4"],
+    "answer": "正确答案字母（如A/B/C/D）",
+    "explanation": "详细解析",
+    "topic": "知识点",
+    "difficulty": "medium",
+    "question_type": "single_choice"
+  }}
+]"""
+
+        messages = [{"role": "user", "content": prompt}]
+        try:
+            response = chat_completion_sync(messages)
+            return self._parse_response(response, "single_choice")
+        except Exception as e:
+            logger.error(f"Failed to generate adaptive questions: {e}")
+            return []
+
+    async def _get_weak_topics(
+        self,
+        user_id: int,
+        session: AsyncSession,
+        subject: str | None = None,
+    ) -> list[str]:
+        query = (
+            select(
+                QuizQuestion.topic,
+                func.count().label("total"),
+                func.sum(case((QuizRecord.is_correct == True, 1), else_=0)).label("correct"),
+            )
+            .join(QuizQuestion, QuizRecord.question_id == QuizQuestion.id)
+            .where(QuizRecord.user_id == user_id)
+        )
+        if subject:
+            query = query.where(QuizQuestion.subject == subject)
+        query = query.group_by(QuizQuestion.topic).order_by(func.count().desc())
+        result = await session.execute(query)
+        rows = result.all()
+
+        weak = []
+        for row in rows:
+            if not row.topic:
+                continue
+            total = row.total or 0
+            correct = row.correct or 0
+            accuracy = (correct / total * 100) if total > 0 else 100
+            if accuracy < 70:
+                weak.append(row.topic)
+
+        if not weak:
+            wrong_query = (
+                select(QuizQuestion.topic, func.count().label("cnt"))
+                .join(WrongQuestion, WrongQuestion.question_id == QuizQuestion.id)
+                .where(WrongQuestion.user_id == user_id, WrongQuestion.mastered == False)
+            )
+            if subject:
+                wrong_query = wrong_query.where(QuizQuestion.subject == subject)
+            wrong_query = wrong_query.group_by(QuizQuestion.topic).order_by(func.count().desc())
+            wrong_result = await session.execute(wrong_query)
+            for row in wrong_result.all():
+                if row.topic:
+                    weak.append(row.topic)
+
+        return weak
 
     def _build_prompt(self, subject: str, topic: str, difficulty: str, count: int, question_type: str) -> str:
         subject_hints = {

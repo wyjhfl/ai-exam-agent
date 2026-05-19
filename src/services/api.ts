@@ -10,12 +10,18 @@ const api = axios.create({
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    const status = error.response?.status;
+    const url = error.config?.url;
+    const detail = error.response?.data?.detail || error.response?.data?.error;
+
     if (!error.response) {
       toast.error("网络连接失败，请检查后端服务");
-    } else if (error.response.status >= 500) {
-      toast.error(error.response.data?.error || "服务器错误");
-    } else if (error.response.status >= 400) {
-      toast.error(error.response.data?.detail || error.response.data?.error || "请求失败");
+      console.error(`[Network Error] ${url}`);
+    } else if (status >= 500) {
+      toast.error(detail || "服务器错误");
+      console.error(`[Server Error ${status}] ${url}: ${detail}`);
+    } else if (status >= 400) {
+      toast.error(detail || "请求失败");
     }
     return Promise.reject(error);
   }
@@ -227,15 +233,18 @@ export async function fetchTodayFocus(userId: number) {
   return data;
 }
 
-export function getExportUrl(userId: number, type: "wrong-questions" | "study-summary", format: "json" | "excel" = "excel") {
+export function getExportUrl(userId: number, type: "wrong-questions" | "study-summary", format: "json" | "excel" | "pdf" = "excel") {
   const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+  if (format === "pdf") {
+    return `${baseURL}/api/export/${userId}/${type}/pdf`;
+  }
   if (format === "excel") {
     return `${baseURL}/api/export/${userId}/${type}/excel`;
   }
   return `${baseURL}/api/export/${userId}/${type}`;
 }
 
-export const APP_VERSION = "0.4.0";
+export const APP_VERSION = "0.5.0";
 
 export async function uploadFile(userId: number, subject: string, fileType: string, file: File, onProgress?: (pct: number) => void) {
   const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -388,6 +397,21 @@ export async function downloadResource(url: string, userId: number, subject: str
 
 export async function generateFromUrl(url: string, subject: string, questionType: string, count: number) {
   const { data } = await api.post("/api/resources/generate-from-url", { url, subject, question_type: questionType, count });
+  return data;
+}
+
+export async function fetchAdaptiveQuestions(userId: number, count: number = 5, subject?: string) {
+  const { data } = await api.post("/api/quiz/adaptive", { user_id: userId, count, subject });
+  return data;
+}
+
+export async function fetchWeakPoints(userId: number) {
+  const { data } = await api.get(`/api/analysis/${userId}/weak-points`);
+  return data;
+}
+
+export async function fetchWeeklyReport(userId: number) {
+  const { data } = await api.get(`/api/analysis/${userId}/weekly-report`);
   return data;
 }
 

@@ -1,38 +1,23 @@
-import { useEffect, useState, useCallback } from "react";
-import { CheckCircle, XCircle, BookOpen, Brain, Sparkles, Loader2, Download, Share2, Timer, Clock } from "lucide-react";
-import { fetchQuestions, submitAnswer, fetchWrongQuestions, markWrongMastered, fetchReviewQuestions, submitReviewAnswer, generateQuizQuestions, fetchMoreQuestions, getExportUrl, shareWrongToCommunity, startMockExam, submitMockExam } from "@/services/api";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { CheckCircle, XCircle, BookOpen, Brain, Sparkles, Loader2, Download, Share2, Timer, Zap, FileText } from "lucide-react";
+import { fetchQuestions, submitAnswer, fetchWrongQuestions, markWrongMastered, fetchReviewQuestions, submitReviewAnswer, generateQuizQuestions, fetchMoreQuestions, getExportUrl, shareWrongToCommunity, startMockExam, submitMockExam, fetchAdaptiveQuestions, fetchWeakPoints } from "@/services/api";
 import { useUserStore } from "@/stores/userStore";
 import { renderLatex } from "@/lib/format";
 import { toast } from "sonner";
+import QuestionCard from "@/components/quiz/QuestionCard";
+import type { Question, WrongQuestion } from "@/components/quiz/QuestionCard";
+import MockExamTimer from "@/components/quiz/MockExamTimer";
+import GeneratePanel from "@/components/quiz/GeneratePanel";
 
-type Mode = "practice" | "wrong" | "review" | "mock";
+type Mode = "practice" | "wrong" | "review" | "mock" | "adaptive";
 type MockState = "setup" | "taking" | "result" | null;
 
-interface Question {
-  id: number;
+interface WeakPoint {
+  topic: string;
   subject: string;
-  question_text: string;
-  question_type?: string;
-  options: string[];
-  answer: string;
-  explanation: string;
-  difficulty?: string;
-}
-
-interface WrongQuestion {
-  wrong_id: number;
-  question_id: number;
-  id: number;
-  subject: string;
-  question_text: string;
-  question_type?: string;
-  options: string[];
-  answer: string;
-  explanation: string;
-  difficulty?: string;
-  mastered: boolean;
-  next_review_at?: string;
-  interval?: number;
+  total: number;
+  correct: number;
+  accuracy: number;
 }
 
 interface ReviewResult {
@@ -40,14 +25,6 @@ interface ReviewResult {
   next_interval: number;
   next_review_at: string;
 }
-
-const QUESTION_TYPE_LABELS: Record<string, string> = {
-  single_choice: "单选题",
-  multiple_choice: "多选题",
-  true_false: "判断题",
-  fill_blank: "填空题",
-  short_answer: "简答题",
-};
 
 function QuizPage() {
   const { userId } = useUserStore();
@@ -84,11 +61,26 @@ function QuizPage() {
   const [shortAnswerInput, setShortAnswerInput] = useState("");
   const [multiSelectAnswers, setMultiSelectAnswers] = useState<string[]>([]);
 
+  const [weakPoints, setWeakPoints] = useState<WeakPoint[]>([]);
+  const [adaptiveLoading, setAdaptiveLoading] = useState(false);
+  const [adaptiveResult, setAdaptiveResult] = useState<{ correct: number; total: number } | null>(null);
+
   const subjects = ["全部", "政治", "英语", "数学"];
 
   useEffect(() => {
     if (mode !== "mock") loadData();
+    if (mode === "adaptive" && userId) loadWeakPoints();
   }, [mode, subject, userId]);
+
+  const loadWeakPoints = async () => {
+    if (!userId) return;
+    try {
+      const data = await fetchWeakPoints(userId);
+      setWeakPoints(data);
+    } catch {
+      // ignore
+    }
+  };
 
   const loadData = async () => {
     setSelectedAnswer(null);
@@ -96,6 +88,7 @@ function QuizPage() {
     setCurrentIndex(0);
     setLastReviewResult(null);
     setReviewStats({ total: 0, correct: 0 });
+    setAdaptiveResult(null);
     if (!userId) return;
 
     try {
@@ -108,13 +101,15 @@ function QuizPage() {
       } else if (mode === "review") {
         const data = await fetchReviewQuestions(userId);
         setReviewQuestions(data);
+      } else if (mode === "adaptive") {
+        return;
       }
     } catch {
       toast.error("加载题目失败");
     }
   };
 
-  const currentList = mode === "practice" ? questions : mode === "wrong" ? wrongQuestions : mode === "review" ? reviewQuestions : mockQuestions;
+  const currentList = mode === "practice" || mode === "adaptive" ? questions : mode === "wrong" ? wrongQuestions : mode === "review" ? reviewQuestions : mockQuestions;
   const current = currentList[currentIndex];
 
   const resetAnswerState = useCallback(() => {
@@ -126,7 +121,7 @@ function QuizPage() {
     setMultiSelectAnswers([]);
   }, []);
 
-  const handleAnswer = async (option: string) => {
+  const handleAnswer = useCallback(async (option: string) => {
     if (showResult || !current) return;
     setSelectedAnswer(option);
     setShowResult(true);
@@ -141,22 +136,36 @@ function QuizPage() {
           total: prev.total + 1,
           correct: prev.correct + (isCorrect ? 1 : 0),
         }));
-      } else if (mode === "practice") {
+      } else if (mode === "practice" || mode === "adaptive") {
         await submitAnswer(userId!, (current as Question).id, option);
+        if (mode === "adaptive") {
+          const isCorrect = option.trim().toUpperCase() === current.answer.trim().toUpperCase();
+          setAdaptiveResult((prev) => ({
+            correct: (prev?.correct || 0) + (isCorrect ? 1 : 0),
+            total: (prev?.total || 0) + 1,
+          }));
+        }
       }
     } catch {
       toast.error("提交失败");
     }
-  };
+  }, [showResult, current, mode, userId]);
 
-  const handleNonChoiceAnswer = async (answer: string) => {
+  const handleNonChoiceAnswer = useCallback(async (answer: string) => {
     if (showResult || !current) return;
     setSelectedAnswer(answer);
     setShowResult(true);
 
     try {
-      if (mode === "practice") {
+      if (mode === "practice" || mode === "adaptive") {
         await submitAnswer(userId!, (current as Question).id, answer);
+        if (mode === "adaptive") {
+          const isCorrect = answer.trim().toUpperCase() === current.answer.trim().toUpperCase();
+          setAdaptiveResult((prev) => ({
+            correct: (prev?.correct || 0) + (isCorrect ? 1 : 0),
+            total: (prev?.total || 0) + 1,
+          }));
+        }
       } else if (mode === "review") {
         const wq = current as WrongQuestion;
         const isCorrect = answer.trim().toUpperCase() === wq.answer.trim().toUpperCase();
@@ -170,7 +179,7 @@ function QuizPage() {
     } catch {
       toast.error("提交失败");
     }
-  };
+  }, [showResult, current, mode, userId]);
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -238,10 +247,10 @@ function QuizPage() {
     }
   };
 
-  const isCorrectAnswer = (option: string) => {
+  const isCorrectAnswer = useCallback((option: string) => {
     if (!current) return false;
     return option.trim().toUpperCase() === current.answer.trim().toUpperCase();
-  };
+  }, [current]);
 
   const handleStartMock = async () => {
     if (!userId) return;
@@ -263,7 +272,7 @@ function QuizPage() {
   };
 
   useEffect(() => {
-    if (mockExamState !== "taking" || mockTimer <= 0) return;
+    if (mockExamState !== "taking") return;
     const interval = setInterval(() => {
       setMockTimer((prev) => {
         if (prev <= 1) {
@@ -274,13 +283,7 @@ function QuizPage() {
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [mockExamState, mockTimer > 0]);
-
-  useEffect(() => {
-    if (mockExamState === "taking" && mockTimer === 0 && mockExamId) {
-      handleSubmitMock();
-    }
-  }, [mockTimer]);
+  }, [mockExamState]);
 
   const handleSubmitMock = async () => {
     if (!mockExamId) return;
@@ -300,6 +303,15 @@ function QuizPage() {
     setMockSubmitting(false);
   };
 
+  const handleSubmitMockRef = useRef(handleSubmitMock);
+  handleSubmitMockRef.current = handleSubmitMock;
+
+  useEffect(() => {
+    if (mockExamState === "taking" && mockTimer === 0 && mockExamId) {
+      handleSubmitMockRef.current();
+    }
+  }, [mockTimer, mockExamState, mockExamId]);
+
   const formatTimer = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -310,198 +322,24 @@ function QuizPage() {
     { key: "practice", label: "练习模式", icon: BookOpen },
     { key: "wrong", label: "错题本", icon: XCircle },
     { key: "review", label: "今日复习", icon: Brain },
+    { key: "adaptive", label: "智能练习", icon: Zap },
     { key: "mock", label: "模拟考试", icon: Timer },
   ];
 
-  const renderQuestionContent = (q: Question | WrongQuestion, isMockTaking: boolean = false) => {
-    const qt = q.question_type || "single_choice";
-
-    if (qt === "single_choice") {
-      return (
-        <div className="space-y-2">
-          {q.options?.map((option, i) => {
-            const letter = String.fromCharCode(65 + i);
-            const isSelected = selectedAnswer === letter;
-            const isCorrect = isCorrectAnswer(letter);
-            let btnClass = "border-border hover:bg-accent";
-            if (showResult && isSelected && isCorrect) btnClass = "border-green-500 bg-green-500/10";
-            else if (showResult && isSelected && !isCorrect) btnClass = "border-red-500 bg-red-500/10";
-            else if (showResult && isCorrect) btnClass = "border-green-500 bg-green-500/10";
-
-            return (
-              <button
-                key={i}
-                onClick={() => { if (isMockTaking) { setMockAnswers((prev) => ({ ...prev, [q.id]: letter })); } else { handleAnswer(letter); } }}
-                disabled={showResult && !isMockTaking}
-                className={`w-full text-left rounded-md border px-4 py-3 text-sm transition-colors ${btnClass} disabled:cursor-default`}
-              >
-                <span className="font-medium mr-2">{letter}.</span>
-                {option}
-                {showResult && isSelected && isCorrect && <CheckCircle className="inline h-4 w-4 ml-2 text-green-500" />}
-                {showResult && isSelected && !isCorrect && <XCircle className="inline h-4 w-4 ml-2 text-red-500" />}
-              </button>
-            );
-          })}
-        </div>
-      );
+  const handleStartAdaptive = async () => {
+    if (!userId) return;
+    setAdaptiveLoading(true);
+    setAdaptiveResult(null);
+    try {
+      const data = await fetchAdaptiveQuestions(userId, 5, subject === "全部" ? undefined : subject);
+      setQuestions(data);
+      setCurrentIndex(0);
+      resetAnswerState();
+      toast.success(`智能出题成功，共 ${data.length} 道题`);
+    } catch {
+      toast.error("智能出题失败");
     }
-
-    if (qt === "multiple_choice") {
-      return (
-        <div className="space-y-2">
-          {q.options?.map((option, i) => {
-            const letter = String.fromCharCode(65 + i);
-            const isChecked = isMockTaking
-              ? (mockAnswers[q.id] || "").split(",").includes(letter)
-              : multiSelectAnswers.includes(letter);
-            const isCorrectOption = q.answer.split(",").map((a: string) => a.trim().toUpperCase()).includes(letter);
-
-            let itemClass = "border-border hover:bg-accent";
-            if (showResult && isChecked && isCorrectOption) itemClass = "border-green-500 bg-green-500/10";
-            else if (showResult && isChecked && !isCorrectOption) itemClass = "border-red-500 bg-red-500/10";
-            else if (showResult && isCorrectOption) itemClass = "border-green-500 bg-green-500/10";
-
-            return (
-              <button
-                key={i}
-                onClick={() => {
-                  if (isMockTaking) {
-                    const current = (mockAnswers[q.id] || "").split(",").filter(Boolean);
-                    const next = current.includes(letter) ? current.filter((l: string) => l !== letter) : [...current, letter];
-                    setMockAnswers((prev) => ({ ...prev, [q.id]: next.sort().join(",") }));
-                  } else {
-                    setMultiSelectAnswers((prev) =>
-                      prev.includes(letter) ? prev.filter((l) => l !== letter) : [...prev, letter].sort()
-                    );
-                  }
-                }}
-                disabled={showResult && !isMockTaking}
-                className={`w-full text-left rounded-md border px-4 py-3 text-sm transition-colors ${itemClass} flex items-center gap-2`}
-              >
-                <span className={`w-4 h-4 rounded border flex items-center justify-center text-xs ${isChecked ? "bg-primary text-primary-foreground border-primary" : "border-border"}`}>
-                  {isChecked ? "✓" : ""}
-                </span>
-                <span className="font-medium mr-2">{letter}.</span>
-                {option}
-              </button>
-            );
-          })}
-          {!isMockTaking && !showResult && multiSelectAnswers.length > 0 && (
-            <button
-              onClick={() => handleNonChoiceAnswer(multiSelectAnswers.join(","))}
-              className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90"
-            >
-              提交多选答案
-            </button>
-          )}
-        </div>
-      );
-    }
-
-    if (qt === "true_false") {
-      return (
-        <div className="flex gap-4">
-          {[
-            { label: "正确 (T)", value: "T" },
-            { label: "错误 (F)", value: "F" },
-          ].map((opt) => {
-            const isSelected = isMockTaking ? mockAnswers[q.id] === opt.value : selectedAnswer === opt.value;
-            const isCorrect = q.answer.trim().toUpperCase() === opt.value;
-            let btnClass = "border-border hover:bg-accent flex-1";
-            if (showResult && isSelected && isCorrect) btnClass = "border-green-500 bg-green-500/10 flex-1";
-            else if (showResult && isSelected && !isCorrect) btnClass = "border-red-500 bg-red-500/10 flex-1";
-            else if (showResult && isCorrect) btnClass = "border-green-500 bg-green-500/10 flex-1";
-
-            return (
-              <button
-                key={opt.value}
-                onClick={() => { if (isMockTaking) { setMockAnswers((prev) => ({ ...prev, [q.id]: opt.value })); } else { handleAnswer(opt.value); } }}
-                disabled={showResult && !isMockTaking}
-                className={`rounded-md border px-6 py-4 text-base font-medium transition-colors ${btnClass}`}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-      );
-    }
-
-    if (qt === "fill_blank") {
-      return (
-        <div className="space-y-3">
-          {isMockTaking ? (
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={mockAnswers[q.id] || ""}
-                onChange={(e) => setMockAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
-                placeholder="请输入答案"
-                className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-              />
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={fillBlankInput}
-                onChange={(e) => setFillBlankInput(e.target.value)}
-                placeholder="请输入答案"
-                disabled={showResult}
-                className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-              />
-              {!showResult && (
-                <button
-                  onClick={() => handleNonChoiceAnswer(fillBlankInput)}
-                  disabled={!fillBlankInput.trim()}
-                  className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                >
-                  提交
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    if (qt === "short_answer") {
-      return (
-        <div className="space-y-3">
-          {isMockTaking ? (
-            <textarea
-              value={mockAnswers[q.id] || ""}
-              onChange={(e) => setMockAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
-              placeholder="请输入答案"
-              rows={4}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
-            />
-          ) : (
-            <>
-              <textarea
-                value={shortAnswerInput}
-                onChange={(e) => setShortAnswerInput(e.target.value)}
-                placeholder="请输入答案"
-                disabled={showResult}
-                rows={4}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
-              />
-              {!showResult && (
-                <button
-                  onClick={() => handleNonChoiceAnswer(shortAnswerInput)}
-                  disabled={!shortAnswerInput.trim()}
-                  className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                >
-                  提交答案
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      );
-    }
-
-    return null;
+    setAdaptiveLoading(false);
   };
 
   if (mode === "mock" && mockExamState === "setup") {
@@ -553,47 +391,38 @@ function QuizPage() {
     const mockQ = mockQuestions[currentIndex];
     return (
       <div className="flex flex-col h-full overflow-hidden">
-        <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-border bg-card">
-          <div className="flex items-center gap-2">
-            <Clock className={`h-5 w-5 ${mockTimer < 300 ? "text-red-500 animate-pulse" : "text-primary"}`} />
-            <span className={`text-lg font-mono font-bold ${mockTimer < 300 ? "text-red-500" : ""}`}>
-              {formatTimer(mockTimer)}
-            </span>
-          </div>
-          <div className="flex gap-1 flex-wrap max-w-[60%]">
-            {mockQuestions.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => { setCurrentIndex(i); resetAnswerState(); }}
-                className={`w-7 h-7 rounded text-xs font-medium ${
-                  i === currentIndex ? "bg-primary text-primary-foreground" :
-                  mockAnswers[mockQuestions[i].id] ? "bg-green-500/20 text-green-700 dark:text-green-400" :
-                  "bg-accent text-muted-foreground"
-                }`}
-              >
-                {i + 1}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={() => { if (confirm("确定交卷吗？")) handleSubmitMock(); }}
-            disabled={mockSubmitting}
-            className="rounded-md bg-primary px-4 py-1.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            交卷
-          </button>
-        </div>
+        <MockExamTimer
+          mockTimer={mockTimer}
+          mockQuestions={mockQuestions}
+          mockAnswers={mockAnswers}
+          currentIndex={currentIndex}
+          mockSubmitting={mockSubmitting}
+          formatTimer={formatTimer}
+          onSubmit={handleSubmitMock}
+          onNavigate={(i) => { setCurrentIndex(i); resetAnswerState(); }}
+        />
 
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-          <div className="rounded-lg border border-border p-4 md:p-6 space-y-4">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="rounded-full bg-primary/10 px-2 py-0.5">{mockQ.subject}</span>
-              {mockQ.question_type && <span className="rounded-full bg-accent px-2 py-0.5">{QUESTION_TYPE_LABELS[mockQ.question_type] || mockQ.question_type}</span>}
-              <span className="ml-auto">{currentIndex + 1} / {mockQuestions.length}</span>
-            </div>
-            <p className="text-base md:text-lg font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: renderLatex(mockQ.question_text) }} />
-            {renderQuestionContent(mockQ, true)}
-          </div>
+          <QuestionCard
+            question={mockQ}
+            isMockTaking
+            selectedAnswer={selectedAnswer}
+            showResult={showResult}
+            fillBlankInput={fillBlankInput}
+            shortAnswerInput={shortAnswerInput}
+            multiSelectAnswers={multiSelectAnswers}
+            mockAnswers={mockAnswers}
+            onAnswer={handleAnswer}
+            onNonChoiceAnswer={handleNonChoiceAnswer}
+            onSetMockAnswers={setMockAnswers}
+            onSetFillBlankInput={setFillBlankInput}
+            onSetShortAnswerInput={setShortAnswerInput}
+            onSetMultiSelectAnswers={setMultiSelectAnswers}
+            isCorrectAnswer={isCorrectAnswer}
+            showMeta
+            currentIndex={currentIndex}
+            totalQuestions={mockQuestions.length}
+          />
         </div>
 
         <div className="flex items-center justify-between px-4 md:px-6 py-3 border-t border-border">
@@ -710,6 +539,7 @@ function QuizPage() {
               AI 出题
             </button>
             {mode === "wrong" && userId && (
+              <>
               <button
                 onClick={handleExportWrong}
                 className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent transition-colors"
@@ -717,50 +547,80 @@ function QuizPage() {
                 <Download className="h-4 w-4" />
                 导出错题
               </button>
+              <button
+                onClick={() => window.open(getExportUrl(userId!, "wrong-questions", "pdf"), "_blank")}
+                className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent transition-colors"
+              >
+                <FileText className="h-4 w-4" />
+                导出PDF
+              </button>
+              </>
             )}
           </>
         )}
       </div>
 
       {showGenerate && (
-        <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
-          <h3 className="text-sm font-medium">AI 智能出题</h3>
-          <div className="flex flex-wrap gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground">科目</label>
-              <select value={genSubject} onChange={(e) => setGenSubject(e.target.value)} className="ml-2 rounded-md border border-input bg-background px-2 py-1 text-sm">
-                <option value="数学">数学</option>
-                <option value="英语">英语</option>
-                <option value="政治">政治</option>
-              </select>
+        <GeneratePanel
+          genSubject={genSubject}
+          genDifficulty={genDifficulty}
+          genCount={genCount}
+          genType={genType}
+          generating={generating}
+          onSetGenSubject={setGenSubject}
+          onSetGenDifficulty={setGenDifficulty}
+          onSetGenCount={setGenCount}
+          onSetGenType={setGenType}
+          onGenerate={handleGenerate}
+        />
+      )}
+
+      {mode === "adaptive" && (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Zap className="h-4 w-4 text-primary" />
+              AI 根据你的薄弱知识点智能出题
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">难度</label>
-              <select value={genDifficulty} onChange={(e) => setGenDifficulty(e.target.value)} className="ml-2 rounded-md border border-input bg-background px-2 py-1 text-sm">
-                <option value="easy">简单</option>
-                <option value="medium">中等</option>
-                <option value="hard">困难</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">题型</label>
-              <select value={genType} onChange={(e) => setGenType(e.target.value)} className="ml-2 rounded-md border border-input bg-background px-2 py-1 text-sm">
-                <option value="single_choice">单选题</option>
-                <option value="multiple_choice">多选题</option>
-                <option value="true_false">判断题</option>
-                <option value="fill_blank">填空题</option>
-                <option value="short_answer">简答题</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">数量</label>
-              <input type="number" min={1} max={10} value={genCount} onChange={(e) => setGenCount(Number(e.target.value))} className="ml-2 w-16 rounded-md border border-input bg-background px-2 py-1 text-sm" />
-            </div>
-            <button onClick={handleGenerate} disabled={generating} className="rounded-md bg-primary px-4 py-1.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1">
-              {generating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-              {generating ? "生成中..." : "生成"}
+            {weakPoints.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {weakPoints.map((wp) => (
+                  <button
+                    key={wp.topic}
+                    onClick={() => setSubject(wp.subject)}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      wp.accuracy < 40
+                        ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                        : wp.accuracy < 70
+                        ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                        : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                    }`}
+                  >
+                    {wp.topic} ({wp.accuracy}%)
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">暂无薄弱知识点数据，先去做几道题吧</p>
+            )}
+            <button
+              onClick={handleStartAdaptive}
+              disabled={adaptiveLoading}
+              className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
+            >
+              {adaptiveLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+              {adaptiveLoading ? "智能出题中..." : "开始智能练习"}
             </button>
           </div>
+          {adaptiveResult && adaptiveResult.total > 0 && (
+            <div className="rounded-lg border border-border p-3 flex items-center gap-4 text-sm">
+              <span>本轮智能练习：{adaptiveResult.correct}/{adaptiveResult.total}</span>
+              <span>正确率：{Math.round((adaptiveResult.correct / adaptiveResult.total) * 100)}%</span>
+              {adaptiveResult.correct / adaptiveResult.total < 0.6 && (
+                <span className="text-amber-600 dark:text-amber-400">建议继续加强薄弱知识点练习</span>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -779,59 +639,64 @@ function QuizPage() {
         </div>
       ) : (
         <div className="flex-1 flex flex-col">
-          <div className="rounded-lg border border-border p-4 md:p-6 space-y-4">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="rounded-full bg-primary/10 px-2 py-0.5">{current.subject}</span>
-              {current.question_type && current.question_type !== "single_choice" && (
-                <span className="rounded-full bg-accent px-2 py-0.5">{QUESTION_TYPE_LABELS[current.question_type] || current.question_type}</span>
-              )}
-              {current.difficulty && <span>{current.difficulty}</span>}
-              <span className="ml-auto">{currentIndex + 1} / {currentList.length}</span>
-            </div>
+          <QuestionCard
+            question={current}
+            selectedAnswer={selectedAnswer}
+            showResult={showResult}
+            fillBlankInput={fillBlankInput}
+            shortAnswerInput={shortAnswerInput}
+            multiSelectAnswers={multiSelectAnswers}
+            mockAnswers={mockAnswers}
+            onAnswer={handleAnswer}
+            onNonChoiceAnswer={handleNonChoiceAnswer}
+            onSetMockAnswers={setMockAnswers}
+            onSetFillBlankInput={setFillBlankInput}
+            onSetShortAnswerInput={setShortAnswerInput}
+            onSetMultiSelectAnswers={setMultiSelectAnswers}
+            isCorrectAnswer={isCorrectAnswer}
+            showMeta
+            currentIndex={currentIndex}
+            totalQuestions={currentList.length}
+          />
 
-            <p className="text-base md:text-lg font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: renderLatex(current.question_text) }} />
-
-            {renderQuestionContent(current)}
-
-            {showResult && (
-              <div className="space-y-2 pt-2 border-t border-border">
-                <div className="flex items-center gap-2">
-                  {selectedAnswer && isCorrectAnswer(selectedAnswer) ? (
-                    <span className="text-green-600 dark:text-green-400 font-medium text-sm">✓ 回答正确</span>
-                  ) : (
-                    <span className="text-red-600 dark:text-red-400 font-medium text-sm">✗ 回答错误，正确答案：{current.answer}</span>
-                  )}
-                </div>
-                {current.explanation && (
-                  <p className="text-sm text-muted-foreground leading-relaxed">{current.explanation}</p>
-                )}
-                {mode === "review" && lastReviewResult && (
-                  <p className="text-sm text-primary">
-                    {lastReviewResult.is_correct
-                      ? `下次复习：${lastReviewResult.next_interval}天后`
-                      : "明天再复习"}
-                  </p>
-                )}
-                {mode === "wrong" && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleMastered((current as WrongQuestion).wrong_id)}
-                      className="rounded-md bg-green-600 px-3 py-1.5 text-sm text-white hover:bg-green-700"
-                    >
-                      标记已掌握
-                    </button>
-                    <button
-                      onClick={() => handleShareWrong((current as WrongQuestion).wrong_id)}
-                      className="rounded-md bg-primary/10 px-3 py-1.5 text-sm text-primary hover:bg-primary/20 flex items-center gap-1"
-                    >
-                      <Share2 className="h-3.5 w-3.5" />
-                      分享到社区
-                    </button>
-                  </div>
+          {showResult && (
+            <div className="space-y-2 pt-2 mt-4 border-t border-border">
+              <div className="flex items-center gap-2">
+                {selectedAnswer && isCorrectAnswer(selectedAnswer) ? (
+                  <span className="text-green-600 dark:text-green-400 font-medium text-sm">✓ 回答正确</span>
+                ) : (
+                  <span className="text-red-600 dark:text-red-400 font-medium text-sm">✗ 回答错误，正确答案：{current.answer}</span>
                 )}
               </div>
-            )}
-          </div>
+              {current.explanation && (
+                <p className="text-sm text-muted-foreground leading-relaxed">{current.explanation}</p>
+              )}
+              {mode === "review" && lastReviewResult && (
+                <p className="text-sm text-primary">
+                  {lastReviewResult.is_correct
+                    ? `下次复习：${lastReviewResult.next_interval}天后`
+                    : "明天再复习"}
+                </p>
+              )}
+              {mode === "wrong" && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleMastered((current as WrongQuestion).wrong_id)}
+                    className="rounded-md bg-green-600 px-3 py-1.5 text-sm text-white hover:bg-green-700"
+                  >
+                    标记已掌握
+                  </button>
+                  <button
+                    onClick={() => handleShareWrong((current as WrongQuestion).wrong_id)}
+                    className="rounded-md bg-primary/10 px-3 py-1.5 text-sm text-primary hover:bg-primary/20 flex items-center gap-1"
+                  >
+                    <Share2 className="h-3.5 w-3.5" />
+                    分享到社区
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex items-center justify-between pt-4">
             <button

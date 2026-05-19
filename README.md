@@ -2,7 +2,7 @@
 
 AI 驱动的考研备考桌面应用，基于 Tauri 2.0 + React + Python FastAPI 构建，支持政治/英语/数学三科备考。
 
-**当前版本：v0.4.0**
+**当前版本：v0.5.0**
 
 ## 功能概览
 
@@ -120,8 +120,8 @@ ai-exam-agent/
 ### 环境要求
 
 - Node.js >= 18
+- Python >= 3.11
 - Rust >= 1.77（Tauri 2.0 要求）
-- Python >= 3.10
 - Visual Studio Build Tools（Windows，C++ 桌面开发工作负载）
 
 ### 1. 前端
@@ -147,15 +147,10 @@ pip install -r requirements.txt
 
 ### 3. 配置环境变量
 
-在 `server/` 目录下创建 `.env` 文件：
-
-```env
-LLM_API_KEY=你的API密钥
-LLM_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
-LLM_MODEL=mimo-v2.5
+```bash
+cp .env.example .env
+# 编辑 .env 填入你的 API Key
 ```
-
-> 如果系统环境变量中已有同名变量（如 `LLM_BASE_URL`），项目会优先使用 `.env` 中的值（`load_dotenv(override=True)`）。
 
 ### 4. 启动后端
 
@@ -176,6 +171,25 @@ npm run tauri dev
 cd server
 python scripts/seed_quiz.py
 ```
+
+## Docker 部署
+
+```bash
+# 配置环境变量
+cp .env.example .env
+# 编辑 .env 填入你的 API Key
+
+# 构建并启动
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f
+
+# 停止
+docker-compose down
+```
+
+后端将在 `http://localhost:8000` 启动，数据持久化到 `./data` 目录。
 
 ## 环境变量
 
@@ -266,6 +280,33 @@ SQLite 本地数据库，包含以下表：
 - `mock_exams` — 模拟考试记录
 
 ## 更新日志
+
+### v0.5.0
+
+**新功能：**
+- 新增错题智能练习（基于薄弱知识点自适应出题，AI 分析正确率 < 70% 的 topic 优先出题）
+- 新增薄弱知识点分析（按 topic 聚合正确率，返回 Top 5 薄弱知识点）
+- 新增错题导出 PDF（reportlab 生成 A4 排版，中文字体，分页+页脚）
+- 新增学习周报（AI 生成周度摘要 + 3 条改进建议 + 下周重点方向）
+- 新增周报页面（WeeklyReportPage，统计卡片+各科对比+AI摘要+薄弱知识点）
+
+**工程化改进：**
+- 后端日志系统（RotatingFileHandler 10MB 轮转 + 请求日志中间件）
+- 前端 ErrorBoundary 错误边界（渲染崩溃时显示友好界面 + 重试按钮）
+- 自动化测试补充（pytest 后端 15 个 + vitest 前端 29 个 = 44 个测试用例）
+- CI 流水线（GitHub Actions：前端 vitest + 后端 pytest）
+- 部署配置（Dockerfile + docker-compose + .env.example + requirements.txt）
+- 数据库索引优化（QuizQuestion/QuizRecord/WrongQuestion/ChatHistory 关键字段）
+- 前端性能优化（React.lazy 路由懒加载 + 组件拆分 + useMemo 缓存）
+- N+1 查询修复（get_wrong_questions 改为 JOIN 查询）
+
+**Bug 修复：**
+- 修复资源下载/生成端点返回 error dict 而非 HTTPException
+- 修复 mockTimer useEffect 依赖导致的重渲染
+- 修复引导对话历史误排除正常消息
+- 修复 HomePage reminders[0] 空数组访问风险
+- 修复 formatMarkdown XSS 风险（新增 sanitizeHtml）
+- 版本号统一更新至 0.5.0
 
 ### v0.4.0
 

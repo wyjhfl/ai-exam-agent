@@ -1,5 +1,6 @@
 import io
 import logging
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -207,4 +208,112 @@ async def export_study_summary_excel(user_id: int, session: AsyncSession = Depen
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=study_summary_{user_id}.xlsx"},
+    )
+
+
+@router.get("/{user_id}/wrong-questions/pdf")
+async def export_wrong_questions_pdf(user_id: int, session: AsyncSession = Depends(get_session)):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.units import cm
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    FONT_NAME = "Helvetica"
+    font_paths = [
+        "C:/Windows/Fonts/msyh.ttc",
+        "C:/Windows/Fonts/simsun.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    ]
+    for fp in font_paths:
+        try:
+            pdfmetrics.registerFont(TTFont("ChineseFont", fp))
+            FONT_NAME = "ChineseFont"
+            break
+        except Exception:
+            pass
+
+    data = await export_wrong_questions(user_id, session)
+    username = data.get("username", "用户")
+    items = data.get("wrong_questions", [])
+
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    w, h = A4
+    margin = 2 * cm
+    usable_w = w - 2 * margin
+    y = h - margin
+
+    def draw_footer(page_num):
+        c.setFont(FONT_NAME, 8)
+        c.drawString(margin, 1 * cm, f"第 {page_num} 页")
+        c.drawRightString(w - margin, 1 * cm, f"导出日期: {datetime.now().strftime('%Y-%m-%d')}")
+
+    def new_page(page_num):
+        if page_num > 1:
+            draw_footer(page_num - 1)
+            c.showPage()
+        return h - margin
+
+    page_num = 1
+    y = new_page(page_num)
+
+    c.setFont(FONT_NAME, 18)
+    c.drawString(margin, y, f"错题本 - {username}")
+    y -= 1.5 * cm
+
+    c.setFont(FONT_NAME, 10)
+    c.drawString(margin, y, f"共 {len(items)} 道错题")
+    y -= 1.5 * cm
+
+    items_on_page = 0
+
+    for idx, item in enumerate(items, 1):
+        if items_on_page >= 3 or y < 6 * cm:
+            page_num += 1
+            y = new_page(page_num)
+            items_on_page = 0
+
+        c.setFont(FONT_NAME, 12)
+        c.drawString(margin, y, f"{idx}. [{item.get('subject', '')}]")
+        y -= 0.8 * cm
+
+        c.setFont(FONT_NAME, 10)
+        question_text = item.get("question", "")
+        max_chars = int(usable_w / 6)
+        for start in range(0, len(question_text), max_chars):
+            c.drawString(margin, y, question_text[start:start + max_chars])
+            y -= 0.6 * cm
+
+        options = item.get("options", [])
+        if options:
+            for opt in options[:4]:
+                opt_text = str(opt)
+                c.drawString(margin + 0.5 * cm, y, opt_text[:max_chars])
+                y -= 0.5 * cm
+
+        c.setFont(FONT_NAME, 10)
+        correct = item.get("correct_answer", "")
+        c.drawString(margin, y, f"正确答案: {correct}")
+        y -= 0.6 * cm
+
+        explanation = item.get("explanation", "")
+        if explanation:
+            c.setFont(FONT_NAME, 9)
+            for start in range(0, len(explanation), max_chars):
+                c.drawString(margin + 0.5 * cm, y, f"解析: {explanation[start:start + max_chars]}")
+                y -= 0.5 * cm
+
+        y -= 0.8 * cm
+        items_on_page += 1
+
+    draw_footer(page_num)
+    c.save()
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=wrong_questions_{user_id}.pdf"},
     )

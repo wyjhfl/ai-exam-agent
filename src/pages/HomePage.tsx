@@ -132,7 +132,7 @@ function HomePage() {
             ))}
           </div>
           <button
-            onClick={() => navigate(reminders[0].action)}
+            onClick={() => reminders.length > 0 && navigate(reminders[0].action)}
             className="text-sm text-primary hover:underline shrink-0"
           >
             去处理

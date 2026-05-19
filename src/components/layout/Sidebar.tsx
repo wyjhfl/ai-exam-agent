@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Home, MessageSquare, BookMarked, BookOpen, BarChart3, PenLine, Timer, Sun, Moon, Monitor, PanelLeftClose, PanelLeft, User, LogOut, RefreshCw, FolderOpen, Users, Network } from "lucide-react";
+import { Home, MessageSquare, BookMarked, BookOpen, BarChart3, PenLine, Timer, Sun, Moon, Monitor, PanelLeftClose, PanelLeft, User, LogOut, RefreshCw, FolderOpen, Users, Network, ClipboardList } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { useUserStore } from "@/stores/userStore";
 import { useSyncStore } from "@/stores/syncStore";
@@ -15,6 +15,7 @@ const navItems = [
   { to: "/writing", icon: PenLine, label: "作文" },
   { to: "/plan", icon: BookOpen, label: "规划" },
   { to: "/analysis", icon: BarChart3, label: "分析" },
+  { to: "/weekly-report", icon: ClipboardList, label: "周报" },
   { to: "/knowledge", icon: Network, label: "知识点" },
   { to: "/community", icon: Users, label: "社区" },
   { to: "/focus", icon: Timer, label: "专注" },

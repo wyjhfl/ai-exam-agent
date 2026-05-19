@@ -1,21 +1,32 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster, toast } from "sonner";
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import Sidebar from "@/components/layout/Sidebar";
-import HomePage from "@/pages/HomePage";
-import ChatPage from "@/pages/ChatPage";
-import QuizPage from "@/pages/QuizPage";
-import WritingPage from "@/pages/WritingPage";
-import PlanPage from "@/pages/PlanPage";
-import AnalysisPage from "@/pages/AnalysisPage";
-import FocusPage from "@/pages/FocusPage";
-import MaterialsPage from "@/pages/MaterialsPage";
-import CommunityPage from "@/pages/CommunityPage";
-import KnowledgePage from "@/pages/KnowledgePage";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useUserStore } from "@/stores/userStore";
 import { useChatStore } from "@/stores/chatStore";
 import LoginForm from "@/components/LoginForm";
 import { checkForUpdate } from "@/services/api";
+
+const HomePage = lazy(() => import("@/pages/HomePage"));
+const ChatPage = lazy(() => import("@/pages/ChatPage"));
+const QuizPage = lazy(() => import("@/pages/QuizPage"));
+const WritingPage = lazy(() => import("@/pages/WritingPage"));
+const PlanPage = lazy(() => import("@/pages/PlanPage"));
+const AnalysisPage = lazy(() => import("@/pages/AnalysisPage"));
+const FocusPage = lazy(() => import("@/pages/FocusPage"));
+const MaterialsPage = lazy(() => import("@/pages/MaterialsPage"));
+const CommunityPage = lazy(() => import("@/pages/CommunityPage"));
+const KnowledgePage = lazy(() => import("@/pages/KnowledgePage"));
+const WeeklyReportPage = lazy(() => import("@/pages/WeeklyReportPage"));
+
+function PageLoader() {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <div className="h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+    </div>
+  );
+}
 
 function App() {
   const { restoreSession, isLoggedIn } = useUserStore();
@@ -47,18 +58,23 @@ function App() {
           <>
             <Sidebar />
             <main className="flex-1 overflow-hidden">
-              <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/chat" element={<ChatPage />} />
-                <Route path="/materials" element={<MaterialsPage />} />
-                <Route path="/quiz" element={<QuizPage />} />
-                <Route path="/writing" element={<WritingPage />} />
-                <Route path="/plan" element={<PlanPage />} />
-                <Route path="/analysis" element={<AnalysisPage />} />
-                <Route path="/focus" element={<FocusPage />} />
-                <Route path="/community" element={<CommunityPage />} />
-                <Route path="/knowledge" element={<KnowledgePage />} />
-              </Routes>
+              <ErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <Routes>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/chat" element={<ChatPage />} />
+                  <Route path="/materials" element={<MaterialsPage />} />
+                  <Route path="/quiz" element={<QuizPage />} />
+                  <Route path="/writing" element={<WritingPage />} />
+                  <Route path="/plan" element={<PlanPage />} />
+                  <Route path="/analysis" element={<AnalysisPage />} />
+                  <Route path="/focus" element={<FocusPage />} />
+                  <Route path="/community" element={<CommunityPage />} />
+                  <Route path="/knowledge" element={<KnowledgePage />} />
+                  <Route path="/weekly-report" element={<WeeklyReportPage />} />
+                </Routes>
+              </Suspense>
+              </ErrorBoundary>
             </main>
           </>
         ) : (

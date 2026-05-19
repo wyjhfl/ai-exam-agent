@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
-import { Clock, Target, TrendingUp, AlertCircle, Download } from "lucide-react";
-import { fetchAnalysisOverview, fetchSubjectStats, fetchTrend, getExportUrl } from "@/services/api";
+import { useNavigate } from "react-router-dom";
+import { Clock, Target, TrendingUp, AlertCircle, Download, Zap, ClipboardList } from "lucide-react";
+import { fetchAnalysisOverview, fetchSubjectStats, fetchTrend, getExportUrl, fetchWeakPoints } from "@/services/api";
 import { useUserStore } from "@/stores/userStore";
 
 interface Overview {
@@ -24,11 +25,21 @@ interface TrendDay {
   accuracy: number;
 }
 
+interface WeakPoint {
+  topic: string;
+  subject: string;
+  total: number;
+  correct: number;
+  accuracy: number;
+}
+
 function AnalysisPage() {
   const { userId } = useUserStore();
+  const navigate = useNavigate();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [subjectStats, setSubjectStats] = useState<SubjectStat[]>([]);
   const [trend, setTrend] = useState<TrendDay[]>([]);
+  const [weakPoints, setWeakPoints] = useState<WeakPoint[]>([]);
   const [showExport, setShowExport] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
 
@@ -49,14 +60,16 @@ function AnalysisPage() {
   const loadData = async () => {
     if (!userId) return;
     try {
-      const [ov, ss, tr] = await Promise.all([
+      const [ov, ss, tr, wp] = await Promise.all([
         fetchAnalysisOverview(userId),
         fetchSubjectStats(userId),
         fetchTrend(userId),
+        fetchWeakPoints(userId),
       ]);
       setOverview(ov);
       setSubjectStats(ss);
       setTrend(tr);
+      setWeakPoints(wp);
     } catch {
       // load failed
     }
@@ -76,7 +89,15 @@ function AnalysisPage() {
     <div className="p-4 md:p-6 space-y-6 overflow-y-auto h-full">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">学情分析</h1>
-        <div className="relative" ref={exportRef}>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate("/weekly-report")}
+            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent transition-colors"
+          >
+            <ClipboardList className="h-4 w-4" />
+            查看周报
+          </button>
+          <div className="relative" ref={exportRef}>
           <button
             onClick={() => setShowExport(!showExport)}
             className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent transition-colors"
@@ -100,6 +121,7 @@ function AnalysisPage() {
               </button>
             </div>
           )}
+        </div>
         </div>
       </div>
 
@@ -161,6 +183,45 @@ function AnalysisPage() {
               </div>
             )}
           </div>
+
+          {weakPoints.length > 0 && (
+            <div className="rounded-lg border border-border p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-primary" />
+                <h3 className="font-semibold text-sm">薄弱知识点</h3>
+              </div>
+              <div className="space-y-2">
+                {weakPoints.map((wp) => (
+                  <div key={wp.topic} className="flex items-center justify-between rounded-md border border-border p-3">
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                          wp.accuracy < 40
+                            ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                            : wp.accuracy < 70
+                            ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                            : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                        }`}
+                      >
+                        {wp.topic}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{wp.subject}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {wp.correct}/{wp.total} ({wp.accuracy}%)
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => navigate("/quiz?mode=adaptive&subject=" + encodeURIComponent(wp.subject))}
+                      className="flex items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-xs text-primary hover:bg-primary/20 transition-colors"
+                    >
+                      <Zap className="h-3 w-3" />
+                      去练习
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="rounded-lg border border-border p-4 space-y-3">
             <h3 className="font-semibold text-sm">最近 7 天学习趋势</h3>

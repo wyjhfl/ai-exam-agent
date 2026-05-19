@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     CHROMA_PERSIST_DIR: str = str(_PROJECT_ROOT.parent / "data" / "chroma_db")
     KNOWLEDGE_BASE_DIR: str = str(_PROJECT_ROOT.parent / "data" / "knowledge-base")
 
+    LOG_LEVEL: str = "INFO"
+    LOG_FILE: str = str(_PROJECT_ROOT.parent / "logs" / "app.log")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

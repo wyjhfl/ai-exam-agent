@@ -1,10 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { Send, BookOpen, Lightbulb, HelpCircle, Compass, MessageCircle } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
 import { useUserStore } from "@/stores/userStore";
 import { explainTopic, solveQuestion, guidedTeaching } from "@/services/api";
 import { formatMarkdown } from "@/lib/format";
 import { toast } from "sonner";
+
+function MessageContent({ content }: { content: string }) {
+  const html = useMemo(() => formatMarkdown(content), [content]);
+  return <div dangerouslySetInnerHTML={{ __html: html }} />;
+}
 
 type ChatMode = "normal" | "explain" | "solve" | "guided";
 
@@ -28,6 +33,10 @@ function ChatPage() {
   const handleSend = async () => {
     const msg = inputValue.current.trim();
     if (!msg || isLoading || guidanceLoading) return;
+    if (chatMode === "guided" && !guidedStarted) {
+      toast.info("请先输入知识点并点击开始引导");
+      return;
+    }
     inputValue.current = "";
     if (inputRef.current) inputRef.current.value = "";
 
@@ -161,6 +170,11 @@ function ChatPage() {
   const lastMsg = messages[messages.length - 1];
   const showHintButtons = chatMode === "guided" && guidedStarted && isGuidedQuestion && lastMsg?.role === "assistant";
 
+  const visibleMessages = useMemo(() => {
+    if (messages.length <= 100) return messages;
+    return messages.slice(-100);
+  }, [messages]);
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -169,7 +183,7 @@ function ChatPage() {
             <p className="text-muted-foreground">向 AI 助手提问考研相关问题</p>
           </div>
         )}
-        {messages.map((msg) => (
+        {visibleMessages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
               className={`max-w-[75%] md:max-w-[60%] rounded-lg px-4 py-2 text-sm ${
@@ -180,7 +194,7 @@ function ChatPage() {
             >
               {msg.role === "assistant" ? (
                 <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <div dangerouslySetInnerHTML={{ __html: formatMarkdown(msg.content) }} />
+                  <MessageContent content={msg.content} />
                 </div>
               ) : (
                 <p>{msg.content}</p>

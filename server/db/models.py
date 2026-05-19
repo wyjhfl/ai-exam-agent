@@ -147,6 +147,23 @@ class Comment(Base):
     shared_item = relationship("SharedItem", back_populates="comments")
 
 
+class UserUpload(Base):
+    __tablename__ = "user_uploads"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    file_id = Column(String(100), nullable=False)
+    filename = Column(String(255), nullable=False)
+    subject = Column(String(100))
+    file_type = Column(String(50))
+    file_path = Column(String(500))
+    file_size = Column(Integer, default=0)
+    indexed = Column(Boolean, default=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+    user = relationship("User")
+
+
 class MockExam(Base):
     __tablename__ = "mock_exams"
 

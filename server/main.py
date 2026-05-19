@@ -1,21 +1,29 @@
+import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from api import chat, quiz, plan, user, knowledge, analysis, writing, focus, export, uploads, guidance, sync, community, knowledge_points, resources, reminders
 from api.exception_handler import generic_exception_handler, validation_exception_handler, http_exception_handler
 from db.database import init_db
+from core.logger import setup_logging
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_logging()
+    logger.info("Starting AI Exam Agent server")
     await init_db()
+    logger.info("Database initialized")
     yield
+    logger.info("Shutting down AI Exam Agent server")
 
 
-app = FastAPI(title="AI Exam Agent", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="AI Exam Agent", version="0.5.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,6 +32,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logger.info(f"{request.method} {request.url.path}")
+    response = await call_next(request)
+    logger.info(f"{request.method} {request.url.path} → {response.status_code}")
+    return response
+
 
 app.add_exception_handler(Exception, generic_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
@@ -49,4 +66,4 @@ app.include_router(reminders.router, prefix="/api/reminders", tags=["reminders"]
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "version": "0.1.0"}
+    return {"status": "ok", "version": "0.5.0"}

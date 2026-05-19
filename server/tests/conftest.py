@@ -6,15 +6,23 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pytest
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.pool import StaticPool
 
 from db.models import Base
 from db.database import get_session
+from main import app
 
+TEST_DB_URL = "sqlite+aiosqlite://"
 
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-
-test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
-TestSessionLocal = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+test_engine = create_async_engine(
+    TEST_DB_URL,
+    echo=False,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+TestSessionLocal = async_sessionmaker(
+    test_engine, class_=AsyncSession, expire_on_commit=False
+)
 
 
 @pytest.fixture(autouse=True)
@@ -26,21 +34,22 @@ async def setup_database():
         await conn.run_sync(Base.metadata.drop_all)
 
 
-async def override_get_session():
+@pytest.fixture
+async def db_session():
     async with TestSessionLocal() as session:
         yield session
 
 
-from main import app
-
-app.dependency_overrides[get_session] = override_get_session
-
-
 @pytest.fixture
-async def client():
+async def client(db_session):
+    async def override_get_session():
+        yield db_session
+
+    app.dependency_overrides[get_session] = override_get_session
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
