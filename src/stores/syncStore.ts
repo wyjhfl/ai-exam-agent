@@ -5,18 +5,18 @@ import { toast } from "sonner";
 interface SyncState {
   lastSyncTime: number | null;
   isSyncing: boolean;
-  syncNow: (userId: number) => Promise<void>;
-  loadStatus: (userId: number) => Promise<void>;
+  syncNow: () => Promise<void>;
+  loadStatus: () => Promise<void>;
 }
 
 export const useSyncStore = create<SyncState>((set) => ({
   lastSyncTime: null,
   isSyncing: false,
 
-  syncNow: async (userId: number) => {
+  syncNow: async () => {
     set({ isSyncing: true });
     try {
-      await syncFull(userId, {});
+      await syncFull({});
       const now = Date.now();
       set({ lastSyncTime: now, isSyncing: false });
       localStorage.setItem("ai_exam_last_sync", String(now));
@@ -27,9 +27,9 @@ export const useSyncStore = create<SyncState>((set) => ({
     }
   },
 
-  loadStatus: async (userId: number) => {
+  loadStatus: async () => {
     try {
-      const data = await fetchSyncStatus(userId);
+      const data = await fetchSyncStatus();
       if (data.last_sync_time) {
         set({ lastSyncTime: new Date(data.last_sync_time).getTime() });
       }

@@ -81,7 +81,7 @@ function CommunityPage() {
     if (!userId || !newTitle.trim() || !newContent.trim()) return;
     setSubmitting(true);
     try {
-      await communityShare(userId, newTitle, newContent, selectedType, selectedSubject);
+      await communityShare(newTitle, newContent, selectedType, selectedSubject);
       toast.success("分享成功！");
       setShowForm(false);
       setNewTitle("");
@@ -108,7 +108,7 @@ function CommunityPage() {
   const handleComment = async () => {
     if (!userId || !commentText.trim() || !selectedPostId) return;
     try {
-      await commentCommunityPost(selectedPostId, userId, commentText);
+      await commentCommunityPost(selectedPostId, commentText);
       setCommentText("");
       loadPostDetail(selectedPostId);
     } catch {

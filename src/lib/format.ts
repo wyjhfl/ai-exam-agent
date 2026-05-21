@@ -2,7 +2,13 @@ import katex from "katex";
 import "katex/dist/katex.min.css";
 
 function sanitizeHtml(html: string): string {
-  return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
+  html = html.replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, "");
+  html = html.replace(/\s+on\w+\s*=\s*[^\s>]*/gi, "");
+  html = html.replace(/javascript\s*:/gi, "");
+  html = html.replace(/data\s*:[^i]/gi, "");
+  html = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
+  html = html.replace(/<\/?(?:iframe|object|embed|form|meta|link)[^>]*>/gi, "");
+  return html;
 }
 
 export function formatMarkdown(text: string): string {

@@ -51,7 +51,7 @@ function WeeklyReportPage() {
     if (!userId) return;
     setLoading(true);
     try {
-      const data = await fetchWeeklyReport(userId);
+      const data = await fetchWeeklyReport();
       setReport(data);
     } catch {
       // load failed
@@ -88,7 +88,7 @@ function WeeklyReportPage() {
           <p className="text-sm text-muted-foreground">{period}</p>
         </div>
         <button
-          onClick={() => window.open(getExportUrl(userId!, "study-summary", "excel"), "_blank")}
+          onClick={() => window.open(getExportUrl("study-summary", "excel"), "_blank")}
           className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent transition-colors"
         >
           <Download className="h-4 w-4" />

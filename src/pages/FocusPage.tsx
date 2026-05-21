@@ -47,7 +47,7 @@ function FocusPage() {
   const loadTodayStats = useCallback(async () => {
     if (!userId) return;
     try {
-      const data = await fetchTodayFocus(userId);
+      const data = await fetchTodayFocus();
       setTodayMinutes(data.total_minutes);
       setTodayCount(data.count);
     } catch {
@@ -88,7 +88,7 @@ function FocusPage() {
       return;
     }
     try {
-      const data = await startFocus(userId, subject, duration);
+      const data = await startFocus(subject, duration);
       setSessionId(data.session_id);
       startTimeRef.current = Date.now();
       setRemaining(duration * 60);

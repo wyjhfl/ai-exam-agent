@@ -54,13 +54,13 @@ function HomePage() {
     }
     if (userId) {
       try {
-        const ov = await fetchAnalysisOverview(userId);
+        const ov = await fetchAnalysisOverview();
         setOverview(ov);
       } catch {
         // no data
       }
       try {
-        const history = await fetchHistory(userId, 6);
+        const history = await fetchHistory(6);
         const recent = history
           .filter((m: any) => m.role === "assistant" || m.role === "user")
           .slice(-3)
@@ -70,25 +70,25 @@ function HomePage() {
         // no history
       }
       try {
-        const reviews = await fetchReviewQuestions(userId);
+        const reviews = await fetchReviewQuestions();
         setReviewCount(reviews.length);
       } catch {
         // no reviews
       }
       try {
-        const focusData = await fetchTodayFocus(userId);
+        const focusData = await fetchTodayFocus();
         setTodayFocusMinutes(focusData.total_minutes);
       } catch {
         // no focus data
       }
       try {
-        const reminderData = await fetchReminders(userId);
+        const reminderData = await fetchReminders();
         setReminders(reminderData.reminders || []);
       } catch {
         // no reminders
       }
       try {
-        const streakData = await fetchStreak(userId);
+        const streakData = await fetchStreak();
         setStreakDays(streakData.streak_days);
         setMaxStreak(streakData.max_streak);
         setCheckedInToday(streakData.checked_in_today);
@@ -119,7 +119,7 @@ function HomePage() {
     if (!userId || checkingIn) return;
     setCheckingIn(true);
     try {
-      const data = await checkIn(userId);
+      const data = await checkIn();
       setStreakDays(data.streak_days);
       setMaxStreak(data.max_streak);
       setCheckedInToday(true);

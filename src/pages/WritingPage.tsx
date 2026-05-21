@@ -39,7 +39,7 @@ function WritingPage() {
   const loadHistory = async () => {
     if (!userId) return;
     try {
-      const data = await fetchWritingHistory(userId);
+      const data = await fetchWritingHistory();
       setHistory(data);
     } catch {
       // no history
@@ -55,7 +55,7 @@ function WritingPage() {
 
     setLoading(true);
     try {
-      const data = await evaluateWriting(text, essayType, userId);
+      const data = await evaluateWriting(text, essayType);
       setResult(data as EvaluationResult);
       toast.success("批改完成！");
       loadHistory();

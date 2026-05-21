@@ -46,7 +46,7 @@ function KnowledgePage() {
   const loadMastery = async () => {
     if (!userId) return;
     try {
-      const data = await getUserMastery(userId);
+      const data = await getUserMastery();
       setMastery(data.mastery?.[selectedSubject] || {});
     } catch {
       console.error("Failed to load mastery");

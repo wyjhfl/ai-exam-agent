@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Float, JSON, ForeignKey, Date
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Float, JSON, ForeignKey, Date, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from db.database import Base
@@ -26,17 +26,32 @@ class User(Base):
     study_sessions = relationship("StudySession", back_populates="user", cascade="all, delete-orphan")
 
 
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String(200), default="新对话")
+    chat_mode = Column(String(20), default="normal")
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    messages = relationship("ChatHistory", back_populates="conversation", cascade="all, delete-orphan")
+
+
 class ChatHistory(Base):
     __tablename__ = "chat_histories"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=True)
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
     sources = Column(JSON, default=[])
     created_at = Column(DateTime, server_default=func.now())
 
     user = relationship("User", back_populates="chat_histories")
+    conversation = relationship("Conversation", back_populates="messages")
 
 
 class StudyPlan(Base):
@@ -195,3 +210,47 @@ class MockExam(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     user = relationship("User")
+
+
+class ExamPaper(Base):
+    __tablename__ = "exam_papers"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String(200), nullable=False)
+    subject = Column(String(100), nullable=False)
+    year = Column(Integer, nullable=False)
+    exam_type = Column(String(50))
+    description = Column(Text)
+    question_count = Column(Integer, default=0)
+    total_score = Column(Float, default=150.0)
+    duration_minutes = Column(Integer, default=180)
+    created_at = Column(DateTime, server_default=func.now())
+
+    questions = relationship("ExamQuestion", back_populates="paper", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("idx_exam_subject_year", "subject", "year"),
+    )
+
+
+class ExamQuestion(Base):
+    __tablename__ = "exam_questions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    paper_id = Column(Integer, ForeignKey("exam_papers.id"), nullable=False)
+    section_name = Column(String(100))
+    question_order = Column(Integer, nullable=False)
+    question_text = Column(Text, nullable=False)
+    question_type = Column(String(30))
+    options = Column(JSON)
+    answer = Column(Text)
+    explanation = Column(Text)
+    score = Column(Float, default=0)
+    topic = Column(String(200))
+    created_at = Column(DateTime, server_default=func.now())
+
+    paper = relationship("ExamPaper", back_populates="questions")
+
+    __table_args__ = (
+        Index("idx_exam_question_paper", "paper_id", "question_order"),
+    )

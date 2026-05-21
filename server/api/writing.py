@@ -4,8 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from db.database import get_session
-from db.models import ChatHistory
+from db.models import ChatHistory, User
+from core.auth import get_current_user
 from core.writing_evaluator import WritingEvaluator
+from models.schemas import WritingEvaluateRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -13,10 +15,10 @@ evaluator = WritingEvaluator()
 
 
 @router.post("/evaluate")
-async def evaluate_writing(request: dict, session: AsyncSession = Depends(get_session)):
-    text = request.get("text", "")
-    essay_type = request.get("essay_type", "english_writing")
-    user_id = request.get("user_id", 1)
+async def evaluate_writing(request: WritingEvaluateRequest, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    text = request.text
+    essay_type = request.essay_type
+    user_id = current_user.id
 
     if not text or len(text.strip()) < 50:
         raise HTTPException(status_code=400, detail="作文内容太短，至少需要50字")
@@ -35,8 +37,9 @@ async def evaluate_writing(request: dict, session: AsyncSession = Depends(get_se
     return result
 
 
-@router.get("/history/{user_id}")
-async def get_writing_history(user_id: int, limit: int = 5, session: AsyncSession = Depends(get_session)):
+@router.get("/history")
+async def get_writing_history(limit: int = 5, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    user_id = current_user.id
     result = await session.execute(
         select(ChatHistory)
         .where(ChatHistory.user_id == user_id, ChatHistory.content.like("[作文批改]%"))

@@ -84,7 +84,7 @@ function SearchModal({ open, onClose }: SearchModalProps) {
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        const data = await globalSearch(userId, query, type);
+        const data = await globalSearch(query, type);
         setResults(data.results || []);
         setSelectedIndex(0);
       } catch {

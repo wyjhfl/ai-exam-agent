@@ -53,5 +53,17 @@ async def client(db_session):
 
 
 @pytest.fixture
+async def auth_client(client):
+    resp = await client.post("/api/user/register", json={
+        "username": "testauthuser",
+        "password": "testpass123",
+    })
+    token = resp.json()["token"]
+    client.headers["Authorization"] = f"Bearer {token}"
+    yield client, resp.json()["user_id"]
+    client.headers.pop("Authorization", None)
+
+
+@pytest.fixture
 def test_db():
     return TestSessionLocal

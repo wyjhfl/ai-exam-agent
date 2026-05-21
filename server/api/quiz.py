@@ -1,12 +1,13 @@
 import json
 import logging
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from db.database import get_session
-from db.models import QuizQuestion, QuizRecord, WrongQuestion, MockExam
+from db.models import QuizQuestion, QuizRecord, WrongQuestion, MockExam, User
 from models.schemas import QuizAnswerRequest, QuizAnswerResponse
+from core.auth import get_current_user
 from core.quiz.engine import QuizEngine
 from core.spaced_repetition import get_due_reviews, record_review
 from core.llm import chat_completion_sync, chat_completion_for_user
@@ -69,7 +70,7 @@ async def get_questions(
     limit: int = 20,
     generate: bool = False,
     count: int = 5,
-    user_id: int = None,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     query = select(QuizQuestion)
@@ -86,7 +87,7 @@ async def get_questions(
             subject=subject or "数学",
             difficulty=difficulty or "medium",
             count=needed,
-            user_id=user_id,
+            user_id=current_user.id,
             session=session,
         )
         for q_data in new_questions:
@@ -124,7 +125,7 @@ async def get_questions(
 
 
 @router.get("/questions/{question_id}")
-async def get_question(question_id: int, session: AsyncSession = Depends(get_session)):
+async def get_question(question_id: int, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     result = await session.execute(select(QuizQuestion).where(QuizQuestion.id == question_id))
     q = result.scalar_one_or_none()
     if not q:
@@ -143,17 +144,16 @@ async def get_question(question_id: int, session: AsyncSession = Depends(get_ses
 
 
 @router.post("/generate")
-async def generate_questions(request: dict, session: AsyncSession = Depends(get_session)):
+async def generate_questions(request: dict, http_request: Request, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     subject = request.get("subject", "数学")
     topic = request.get("topic", "")
     difficulty = request.get("difficulty", "medium")
     count = min(request.get("count", 5), 10)
     question_type = request.get("question_type", "single_choice")
-    user_id = request.get("user_id")
 
     new_questions = await quiz_engine.generate_questions(
         subject=subject, topic=topic, difficulty=difficulty, count=count, question_type=question_type,
-        user_id=user_id, session=session,
+        user_id=current_user.id, session=session,
     )
     if not new_questions:
         raise HTTPException(status_code=500, detail="AI 题目生成失败，请稍后重试")
@@ -195,16 +195,12 @@ async def generate_questions(request: dict, session: AsyncSession = Depends(get_
 
 
 @router.post("/adaptive")
-async def adaptive_questions(request: dict, session: AsyncSession = Depends(get_session)):
-    user_id = request.get("user_id")
+async def adaptive_questions(request: dict, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     count = min(request.get("count", 5), 10)
     subject = request.get("subject")
 
-    if not user_id:
-        raise HTTPException(status_code=400, detail="user_id is required")
-
     new_questions = await quiz_engine.generate_adaptive_questions(
-        user_id=user_id, session=session, count=count, subject=subject
+        user_id=current_user.id, session=session, count=count, subject=subject
     )
     if not new_questions:
         raise HTTPException(status_code=500, detail="AI 自适应出题失败，请稍后重试")
@@ -245,7 +241,7 @@ async def adaptive_questions(request: dict, session: AsyncSession = Depends(get_
 
 
 @router.post("/answer", response_model=QuizAnswerResponse)
-async def submit_answer(request: QuizAnswerRequest, session: AsyncSession = Depends(get_session)):
+async def submit_answer(request: QuizAnswerRequest, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     result = await session.execute(select(QuizQuestion).where(QuizQuestion.id == request.question_id))
     question = result.scalar_one_or_none()
     if not question:
@@ -254,13 +250,13 @@ async def submit_answer(request: QuizAnswerRequest, session: AsyncSession = Depe
     qt = question.question_type or "single_choice"
 
     if qt == "short_answer":
-        grade = await _grade_short_answer(question.question_text, question.answer, request.selected_answer, request.user_id, session)
+        grade = await _grade_short_answer(question.question_text, question.answer, request.selected_answer, current_user.id, session)
         is_correct = grade["is_correct"]
     else:
         is_correct = _check_answer(qt, request.selected_answer, question.answer)
 
     record = QuizRecord(
-        user_id=request.user_id,
+        user_id=current_user.id,
         question_id=request.question_id,
         selected_answer=request.selected_answer,
         is_correct=is_correct,
@@ -270,13 +266,13 @@ async def submit_answer(request: QuizAnswerRequest, session: AsyncSession = Depe
     if not is_correct:
         existing = await session.execute(
             select(WrongQuestion).where(
-                WrongQuestion.user_id == request.user_id,
+                WrongQuestion.user_id == current_user.id,
                 WrongQuestion.question_id == request.question_id,
             )
         )
         if not existing.scalar_one_or_none():
             wrong = WrongQuestion(
-                user_id=request.user_id,
+                user_id=current_user.id,
                 question_id=request.question_id,
                 next_review_at=datetime.now() + timedelta(days=1),
             )
@@ -291,12 +287,12 @@ async def submit_answer(request: QuizAnswerRequest, session: AsyncSession = Depe
     )
 
 
-@router.get("/wrong/{user_id}")
-async def get_wrong_questions(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.get("/wrong")
+async def get_wrong_questions(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     result = await session.execute(
         select(WrongQuestion, QuizQuestion)
         .join(QuizQuestion, WrongQuestion.question_id == QuizQuestion.id)
-        .where(WrongQuestion.user_id == user_id, WrongQuestion.mastered == False)
+        .where(WrongQuestion.user_id == current_user.id, WrongQuestion.mastered == False)
     )
     rows = result.all()
     items = []
@@ -317,23 +313,25 @@ async def get_wrong_questions(user_id: int, session: AsyncSession = Depends(get_
 
 
 @router.post("/wrong/{wrong_id}/master")
-async def mark_wrong_mastered(wrong_id: int, session: AsyncSession = Depends(get_session)):
+async def mark_wrong_mastered(wrong_id: int, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     result = await session.execute(select(WrongQuestion).where(WrongQuestion.id == wrong_id))
     wrong = result.scalar_one_or_none()
     if not wrong:
         raise HTTPException(status_code=404, detail="Wrong question record not found")
+    if wrong.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this record")
     wrong.mastered = True
     await session.commit()
     return {"status": "ok", "wrong_id": wrong_id, "mastered": True}
 
 
-@router.get("/review/{user_id}")
-async def get_review_questions(user_id: int, session: AsyncSession = Depends(get_session)):
-    return await get_due_reviews(user_id, session)
+@router.get("/review")
+async def get_review_questions(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    return await get_due_reviews(current_user.id, session)
 
 
 @router.post("/review/{wrong_id}/answer")
-async def submit_review_answer(wrong_id: int, request: dict, session: AsyncSession = Depends(get_session)):
+async def submit_review_answer(wrong_id: int, request: dict, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     is_correct = request.get("is_correct", False)
     result = await record_review(wrong_id, is_correct, session)
     if "error" in result:
@@ -342,18 +340,14 @@ async def submit_review_answer(wrong_id: int, request: dict, session: AsyncSessi
 
 
 @router.post("/mock-exam")
-async def start_mock_exam(request: dict, session: AsyncSession = Depends(get_session)):
-    user_id = request.get("user_id")
+async def start_mock_exam(request: dict, http_request: Request, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     subject = request.get("subject", "数学")
     question_count = min(request.get("question_count", 20), 50)
     duration_minutes = request.get("duration_minutes", 60)
 
-    if not user_id:
-        raise HTTPException(status_code=400, detail="user_id is required")
-
     new_questions = await quiz_engine.generate_questions(
         subject=subject, difficulty="medium", count=question_count,
-        user_id=user_id, session=session,
+        user_id=current_user.id, session=session,
     )
     if not new_questions:
         raise HTTPException(status_code=500, detail="AI 题目生成失败，请稍后重试")
@@ -375,7 +369,7 @@ async def start_mock_exam(request: dict, session: AsyncSession = Depends(get_ses
         saved_questions.append(q)
 
     mock_exam = MockExam(
-        user_id=user_id,
+        user_id=current_user.id,
         subject=subject,
         total_score=0,
         max_score=float(question_count),
@@ -411,11 +405,11 @@ async def start_mock_exam(request: dict, session: AsyncSession = Depends(get_ses
     }
 
 
-@router.get("/mock-exam/history/{user_id}")
-async def get_mock_exam_history(user_id: int, limit: int = 10, session: AsyncSession = Depends(get_session)):
+@router.get("/mock-exam/history")
+async def get_mock_exam_history(limit: int = 10, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     result = await session.execute(
         select(MockExam)
-        .where(MockExam.user_id == user_id)
+        .where(MockExam.user_id == current_user.id)
         .order_by(MockExam.created_at.desc())
         .limit(limit)
     )
@@ -437,7 +431,7 @@ async def get_mock_exam_history(user_id: int, limit: int = 10, session: AsyncSes
 
 
 @router.post("/mock-exam/{exam_id}/submit")
-async def submit_mock_exam(exam_id: int, request: dict, session: AsyncSession = Depends(get_session)):
+async def submit_mock_exam(exam_id: int, request: dict, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     answers = request.get("answers", [])
     duration_seconds = request.get("duration_seconds", 0)
 
@@ -460,13 +454,13 @@ async def submit_mock_exam(exam_id: int, request: dict, session: AsyncSession = 
 
         qt = question.question_type or "single_choice"
         if qt == "short_answer":
-            grade = await _grade_short_answer(question.question_text, question.answer, selected, mock_exam.user_id, session)
+            grade = await _grade_short_answer(question.question_text, question.answer, selected, current_user.id, session)
             is_correct = grade["is_correct"]
         else:
             is_correct = _check_answer(qt, selected, question.answer)
 
         record = QuizRecord(
-            user_id=mock_exam.user_id,
+            user_id=current_user.id,
             question_id=q_id,
             selected_answer=selected,
             is_correct=is_correct,
@@ -478,13 +472,13 @@ async def submit_mock_exam(exam_id: int, request: dict, session: AsyncSession = 
         else:
             existing = await session.execute(
                 select(WrongQuestion).where(
-                    WrongQuestion.user_id == mock_exam.user_id,
+                    WrongQuestion.user_id == current_user.id,
                     WrongQuestion.question_id == q_id,
                 )
             )
             if not existing.scalar_one_or_none():
                 wrong = WrongQuestion(
-                    user_id=mock_exam.user_id,
+                    user_id=current_user.id,
                     question_id=q_id,
                     next_review_at=datetime.now() + timedelta(days=1),
                 )

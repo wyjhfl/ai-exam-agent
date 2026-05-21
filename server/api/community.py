@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from db.database import get_session
 from db.models import SharedItem, Comment, WrongQuestion, User
+from core.auth import get_current_user
 from models.schemas import CommunityShareRequest, CommunityCommentRequest
 
 logger = logging.getLogger(__name__)
@@ -11,13 +12,13 @@ router = APIRouter()
 
 
 @router.post("/share")
-async def share_content(request: CommunityShareRequest, session: AsyncSession = Depends(get_session)):
-    user = await session.get(User, request.user_id)
+async def share_content(request: CommunityShareRequest, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    user = await session.get(User, current_user.id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
     item = SharedItem(
-        user_id=request.user_id,
+        user_id=current_user.id,
         title=request.title,
         content=request.content,
         item_type=request.item_type,
@@ -36,32 +37,35 @@ async def get_posts(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
-    query = select(SharedItem).order_by(SharedItem.created_at.desc())
     count_query = select(func.count()).select_from(SharedItem)
-
     if subject:
-        query = query.where(SharedItem.subject == subject)
         count_query = count_query.where(SharedItem.subject == subject)
     if type:
-        query = query.where(SharedItem.item_type == type)
         count_query = count_query.where(SharedItem.item_type == type)
-
     total = (await session.execute(count_query)).scalar() or 0
-    query = query.offset((page - 1) * limit).limit(limit)
+
+    query = (
+        select(SharedItem, User.username, func.count(Comment.id).label("comment_count"))
+        .join(User, SharedItem.user_id == User.id)
+        .outerjoin(Comment, Comment.shared_item_id == SharedItem.id)
+    )
+    if subject:
+        query = query.where(SharedItem.subject == subject)
+    if type:
+        query = query.where(SharedItem.item_type == type)
+
+    query = query.group_by(SharedItem.id, User.username).order_by(SharedItem.created_at.desc()).offset((page - 1) * limit).limit(limit)
     result = await session.execute(query)
-    items = result.scalars().all()
+    rows = result.all()
 
     posts = []
-    for item in items:
-        user = await session.get(User, item.user_id)
-        comment_count = (await session.execute(
-            select(func.count()).select_from(Comment).where(Comment.shared_item_id == item.id)
-        )).scalar() or 0
+    for item, username, comment_count in rows:
         posts.append({
             "id": item.id,
             "user_id": item.user_id,
-            "username": user.username if user else "未知",
+            "username": username or "未知",
             "title": item.title,
             "content": item.content[:200] + ("..." if len(item.content) > 200 else ""),
             "item_type": item.item_type,
@@ -75,24 +79,27 @@ async def get_posts(
 
 
 @router.get("/posts/{post_id}")
-async def get_post_detail(post_id: int, session: AsyncSession = Depends(get_session)):
+async def get_post_detail(post_id: int, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
     item = await session.get(SharedItem, post_id)
     if not item:
         raise HTTPException(status_code=404, detail="帖子不存在")
 
     user = await session.get(User, item.user_id)
+
     comments_result = await session.execute(
-        select(Comment).where(Comment.shared_item_id == post_id).order_by(Comment.created_at)
+        select(Comment, User.username)
+        .join(User, Comment.user_id == User.id)
+        .where(Comment.shared_item_id == post_id)
+        .order_by(Comment.created_at)
     )
-    comments = comments_result.scalars().all()
+    comment_rows = comments_result.all()
 
     comment_list = []
-    for c in comments:
-        c_user = await session.get(User, c.user_id)
+    for c, c_username in comment_rows:
         comment_list.append({
             "id": c.id,
             "user_id": c.user_id,
-            "username": c_user.username if c_user else "未知",
+            "username": c_username or "未知",
             "content": c.content,
             "created_at": c.created_at.isoformat() if c.created_at else None,
         })
@@ -112,7 +119,7 @@ async def get_post_detail(post_id: int, session: AsyncSession = Depends(get_sess
 
 
 @router.post("/posts/{post_id}/like")
-async def like_post(post_id: int, session: AsyncSession = Depends(get_session)):
+async def like_post(post_id: int, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
     item = await session.get(SharedItem, post_id)
     if not item:
         raise HTTPException(status_code=404, detail="帖子不存在")
@@ -122,17 +129,17 @@ async def like_post(post_id: int, session: AsyncSession = Depends(get_session)):
 
 
 @router.post("/posts/{post_id}/comment")
-async def add_comment(post_id: int, request: CommunityCommentRequest, session: AsyncSession = Depends(get_session)):
+async def add_comment(post_id: int, request: CommunityCommentRequest, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
     item = await session.get(SharedItem, post_id)
     if not item:
         raise HTTPException(status_code=404, detail="帖子不存在")
 
-    user = await session.get(User, request.user_id)
+    user = await session.get(User, current_user.id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
     comment = Comment(
-        user_id=request.user_id,
+        user_id=current_user.id,
         shared_item_id=post_id,
         content=request.content,
     )
@@ -143,19 +150,21 @@ async def add_comment(post_id: int, request: CommunityCommentRequest, session: A
 
 
 @router.get("/posts/{post_id}/comments")
-async def get_comments(post_id: int, session: AsyncSession = Depends(get_session)):
+async def get_comments(post_id: int, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
     result = await session.execute(
-        select(Comment).where(Comment.shared_item_id == post_id).order_by(Comment.created_at)
+        select(Comment, User.username)
+        .join(User, Comment.user_id == User.id)
+        .where(Comment.shared_item_id == post_id)
+        .order_by(Comment.created_at)
     )
-    comments = result.scalars().all()
+    rows = result.all()
 
     comment_list = []
-    for c in comments:
-        user = await session.get(User, c.user_id)
+    for c, username in rows:
         comment_list.append({
             "id": c.id,
             "user_id": c.user_id,
-            "username": user.username if user else "未知",
+            "username": username or "未知",
             "content": c.content,
             "created_at": c.created_at.isoformat() if c.created_at else None,
         })
@@ -164,12 +173,14 @@ async def get_comments(post_id: int, session: AsyncSession = Depends(get_session
 
 
 @router.post("/share-wrong/{wrong_id}")
-async def share_wrong_question(wrong_id: int, session: AsyncSession = Depends(get_session)):
+async def share_wrong_question(wrong_id: int, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
     from db.models import QuizQuestion
 
     wq = await session.get(WrongQuestion, wrong_id)
     if not wq:
         raise HTTPException(status_code=404, detail="错题不存在")
+    if wq.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权分享他人的错题")
 
     question = await session.get(QuizQuestion, wq.question_id) if wq.question_id else None
     title = f"错题分享：{question.subject if question else '未知科目'}"

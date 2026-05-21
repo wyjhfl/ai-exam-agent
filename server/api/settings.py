@@ -5,7 +5,9 @@ from sqlalchemy import select
 from openai import AsyncOpenAI
 from db.database import get_session
 from db.models import User
+from core.auth import get_current_user
 from config import settings
+from models.schemas import LLMConfigUpdate
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -19,8 +21,9 @@ def _mask_key(key: str | None) -> str:
     return key[:3] + "***" + key[-3:]
 
 
-@router.get("/{user_id}/llm")
-async def get_llm_config(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.get("/llm")
+async def get_llm_config(session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    user_id = current_user.id
     result = await session.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -39,16 +42,17 @@ async def get_llm_config(user_id: int, session: AsyncSession = Depends(get_sessi
     }
 
 
-@router.put("/{user_id}/llm")
-async def update_llm_config(user_id: int, config: dict, session: AsyncSession = Depends(get_session)):
+@router.put("/llm")
+async def update_llm_config(config: LLMConfigUpdate, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    user_id = current_user.id
     result = await session.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         return {"error": "User not found"}
 
-    api_key = config.get("api_key")
-    base_url = config.get("base_url")
-    model = config.get("model")
+    api_key = config.api_key
+    base_url = config.base_url
+    model = config.model
 
     if api_key is not None:
         user.llm_api_key = api_key if api_key else None
@@ -69,38 +73,47 @@ async def update_llm_config(user_id: int, config: dict, session: AsyncSession = 
     }
 
 
-@router.post("/{user_id}/llm/test")
-async def test_llm_config(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.post("/llm/test")
+async def test_llm_config(session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    user_id = current_user.id
     result = await session.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
 
-    api_key = user.llm_api_key if user else None
-    base_url = user.llm_base_url if user else None
-    model = user.llm_model if user else None
+    user_api_key = user.llm_api_key if user else None
+    user_base_url = user.llm_base_url if user else None
+    user_model = user.llm_model if user else None
 
-    if not (api_key and base_url and model):
-        api_key = settings.LLM_API_KEY
-        base_url = settings.LLM_BASE_URL
-        model = settings.LLM_MODEL
+    api_key = user_api_key or settings.LLM_API_KEY
+    base_url = user_base_url or settings.LLM_BASE_URL
+    model = user_model or settings.LLM_MODEL
 
     if not api_key:
-        return {"success": False, "message": "未配置 API Key"}
+        return {"success": False, "message": "未配置 API Key，请先填写 API Key 并保存"}
+    if not base_url:
+        return {"success": False, "message": "未配置 Base URL，请先填写 Base URL 并保存"}
+    if not model:
+        return {"success": False, "message": "未配置 Model，请先填写 Model 并保存"}
 
     try:
         client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         response = await client.chat.completions.create(
             model=model,
-            messages=[{"role": "user", "content": "回复ok"}],
-            max_tokens=10,
+            messages=[{"role": "user", "content": "请回复ok"}],
+            max_tokens=50,
         )
-        content = response.choices[0].message.content
-        return {"success": True, "message": f"连接成功：{content}"}
+        content = response.choices[0].message.content or ""
+        using_user = "自定义" if (user_api_key and user_base_url and user_model) else "全局默认"
+        if content.strip():
+            return {"success": True, "message": f"连接成功（{using_user}配置）：{content.strip()}"}
+        return {"success": True, "message": f"连接成功（{using_user}配置）：API 已响应"}
     except Exception as e:
-        return {"success": False, "message": f"连接失败：{str(e)[:200]}"}
+        error_msg = str(e)[:200]
+        return {"success": False, "message": f"连接失败：{error_msg}"}
 
 
-@router.delete("/{user_id}/llm")
-async def reset_llm_config(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.delete("/llm")
+async def reset_llm_config(session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    user_id = current_user.id
     result = await session.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:

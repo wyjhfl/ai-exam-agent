@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, func
 from db.database import get_session
-from db.models import QuizQuestion, ChatHistory, UserUpload
+from db.models import QuizQuestion, ChatHistory, UserUpload, User
+from core.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -27,15 +28,16 @@ def _make_snippet(text: str, keyword: str, max_len: int = 100) -> str:
     return snippet[:max_len + 10]
 
 
-@router.get("/{user_id}")
+@router.get("")
 async def global_search(
-    user_id: int,
     q: str,
     type: str = "all",
     page: int = 1,
     page_size: int = 20,
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
+    user_id = current_user.id
     if not q or len(q.strip()) < 1:
         return {"results": [], "total": 0, "page": page, "page_size": page_size}
 

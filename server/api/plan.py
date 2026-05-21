@@ -1,10 +1,11 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from db.database import get_session
-from db.models import StudyPlan
+from db.models import StudyPlan, User
 from models.schemas import PlanGenerateRequest
+from core.auth import get_current_user
 from core.planner.engine import PlanningEngine
 
 logger = logging.getLogger(__name__)
@@ -13,25 +14,25 @@ planning_engine = PlanningEngine()
 
 
 @router.post("/generate")
-async def generate_plan(request: PlanGenerateRequest, session: AsyncSession = Depends(get_session)):
+async def generate_plan(request: PlanGenerateRequest, http_request: Request, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     plan_data = await planning_engine.generate_plan(
         target_school=request.target_school,
         target_major=request.target_major,
         exam_date=request.exam_date,
         subjects=request.subjects,
-        user_id=request.user_id,
+        user_id=current_user.id,
         session=session,
     )
 
     existing = await session.execute(
-        select(StudyPlan).where(StudyPlan.user_id == request.user_id, StudyPlan.is_active == True)
+        select(StudyPlan).where(StudyPlan.user_id == current_user.id, StudyPlan.is_active == True)
     )
     old_plan = existing.scalar_one_or_none()
     if old_plan:
         old_plan.is_active = False
 
     new_plan = StudyPlan(
-        user_id=request.user_id,
+        user_id=current_user.id,
         target_school=request.target_school,
         subject=request.target_major,
         current_level=json_level(request.subjects),
@@ -45,10 +46,10 @@ async def generate_plan(request: PlanGenerateRequest, session: AsyncSession = De
     return {"id": new_plan.id, "plan_data": plan_data, "target_school": request.target_school, "target_major": request.target_major}
 
 
-@router.get("/{user_id}")
-async def get_plan(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.get("")
+async def get_plan(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     result = await session.execute(
-        select(StudyPlan).where(StudyPlan.user_id == user_id, StudyPlan.is_active == True)
+        select(StudyPlan).where(StudyPlan.user_id == current_user.id, StudyPlan.is_active == True)
     )
     plan = result.scalar_one_or_none()
     if not plan:
@@ -57,8 +58,8 @@ async def get_plan(user_id: int, session: AsyncSession = Depends(get_session)):
 
 
 @router.put("/{plan_id}")
-async def update_plan(plan_id: int, request: dict, session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(StudyPlan).where(StudyPlan.id == plan_id))
+async def update_plan(plan_id: int, request: dict, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(StudyPlan).where(StudyPlan.id == plan_id, StudyPlan.user_id == current_user.id))
     plan = result.scalar_one_or_none()
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")

@@ -76,7 +76,7 @@ function QuizPage() {
   const loadWeakPoints = async () => {
     if (!userId) return;
     try {
-      const data = await fetchWeakPoints(userId);
+      const data = await fetchWeakPoints();
       setWeakPoints(data);
     } catch {
       // ignore
@@ -97,10 +97,10 @@ function QuizPage() {
         const data = await fetchQuestions(subject === "全部" ? undefined : subject);
         setQuestions(data);
       } else if (mode === "wrong") {
-        const data = await fetchWrongQuestions(userId);
+        const data = await fetchWrongQuestions();
         setWrongQuestions(data);
       } else if (mode === "review") {
-        const data = await fetchReviewQuestions(userId);
+        const data = await fetchReviewQuestions();
         setReviewQuestions(data);
       } else if (mode === "adaptive") {
         return;
@@ -138,7 +138,7 @@ function QuizPage() {
           correct: prev.correct + (isCorrect ? 1 : 0),
         }));
       } else if (mode === "practice" || mode === "adaptive") {
-        await submitAnswer(userId!, (current as Question).id, option);
+        await submitAnswer((current as Question).id, option);
         if (mode === "adaptive") {
           const isCorrect = option.trim().toUpperCase() === current.answer.trim().toUpperCase();
           setAdaptiveResult((prev) => ({
@@ -159,7 +159,7 @@ function QuizPage() {
 
     try {
       if (mode === "practice" || mode === "adaptive") {
-        await submitAnswer(userId!, (current as Question).id, answer);
+        await submitAnswer((current as Question).id, answer);
         if (mode === "adaptive") {
           const isCorrect = answer.trim().toUpperCase() === current.answer.trim().toUpperCase();
           setAdaptiveResult((prev) => ({
@@ -235,7 +235,7 @@ function QuizPage() {
 
   const handleExportWrong = () => {
     if (!userId) return;
-    const url = getExportUrl(userId, "wrong-questions", "excel");
+    const url = getExportUrl("wrong-questions", "excel");
     window.open(url, "_blank");
   };
 
@@ -257,7 +257,7 @@ function QuizPage() {
     if (!userId) return;
     setMockSubmitting(true);
     try {
-      const data = await startMockExam(userId, mockSubject, mockCount, mockDuration);
+      const data = await startMockExam(mockSubject, mockCount, mockDuration);
       setMockExamId(data.exam_id);
       setMockQuestions(data.questions);
       setMockAnswers({});
@@ -332,7 +332,7 @@ function QuizPage() {
     setAdaptiveLoading(true);
     setAdaptiveResult(null);
     try {
-      const data = await fetchAdaptiveQuestions(userId, 5, subject === "全部" ? undefined : subject);
+      const data = await fetchAdaptiveQuestions(5, subject === "全部" ? undefined : subject);
       setQuestions(data);
       setCurrentIndex(0);
       resetAnswerState();
@@ -346,7 +346,7 @@ function QuizPage() {
   const loadMockExamHistory = async () => {
     if (!userId) return;
     try {
-      const data = await fetchMockExamHistory(userId);
+      const data = await fetchMockExamHistory();
       setMockExamHistory(data);
     } catch {
       // ignore
@@ -588,7 +588,7 @@ function QuizPage() {
                 导出错题
               </button>
               <button
-                onClick={() => window.open(getExportUrl(userId!, "wrong-questions", "pdf"), "_blank")}
+                onClick={() => window.open(getExportUrl("wrong-questions", "pdf"), "_blank")}
                 className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent transition-colors"
               >
                 <FileText className="h-4 w-4" />

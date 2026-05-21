@@ -4,14 +4,16 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from db.database import get_session
-from db.models import StudyStreak
+from db.models import StudyStreak, User
+from core.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/{user_id}/checkin")
-async def checkin(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.post("/checkin")
+async def checkin(session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    user_id = current_user.id
     result = await session.execute(
         select(StudyStreak).where(StudyStreak.user_id == user_id)
     )
@@ -61,8 +63,9 @@ async def checkin(user_id: int, session: AsyncSession = Depends(get_session)):
     }
 
 
-@router.get("/{user_id}")
-async def get_streak(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.get("")
+async def get_streak(session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    user_id = current_user.id
     result = await session.execute(
         select(StudyStreak).where(StudyStreak.user_id == user_id)
     )

@@ -1,6 +1,7 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Clock, Target, TrendingUp, AlertCircle, Download, Zap, ClipboardList } from "lucide-react";
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
 import { fetchAnalysisOverview, fetchSubjectStats, fetchTrend, getExportUrl, fetchWeakPoints } from "@/services/api";
 import { useUserStore } from "@/stores/userStore";
 
@@ -39,37 +40,29 @@ function AnalysisPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [subjectStats, setSubjectStats] = useState<SubjectStat[]>([]);
   const [trend, setTrend] = useState<TrendDay[]>([]);
+  const [trend60, setTrend60] = useState<TrendDay[]>([]);
   const [weakPoints, setWeakPoints] = useState<WeakPoint[]>([]);
   const [showExport, setShowExport] = useState(false);
-  const exportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (userId) loadData();
   }, [userId]);
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
-        setShowExport(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
   const loadData = async () => {
     if (!userId) return;
     try {
-      const [ov, ss, tr, wp] = await Promise.all([
-        fetchAnalysisOverview(userId),
-        fetchSubjectStats(userId),
-        fetchTrend(userId),
-        fetchWeakPoints(userId),
+      const [ov, ss, tr, wp, tr60] = await Promise.all([
+        fetchAnalysisOverview(),
+        fetchSubjectStats(),
+        fetchTrend(30),
+        fetchWeakPoints(),
+        fetchTrend(60),
       ]);
       setOverview(ov);
       setSubjectStats(ss);
       setTrend(tr);
       setWeakPoints(wp);
+      setTrend60(tr60);
     } catch {
       // load failed
     }
@@ -77,7 +70,7 @@ function AnalysisPage() {
 
   const handleExport = (type: "wrong-questions" | "study-summary") => {
     if (!userId) return;
-    const url = getExportUrl(userId, type, "excel");
+    const url = getExportUrl(type, "excel");
     window.open(url, "_blank");
     setShowExport(false);
   };
@@ -97,7 +90,7 @@ function AnalysisPage() {
             <ClipboardList className="h-4 w-4" />
             查看周报
           </button>
-          <div className="relative" ref={exportRef}>
+          <div className="relative">
           <button
             onClick={() => setShowExport(!showExport)}
             className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent transition-colors"
@@ -241,6 +234,74 @@ function AnalysisPage() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border p-4 space-y-3">
+            <h3 className="font-semibold text-sm">近 30 天正确率趋势</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={trend}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="date" tickFormatter={(v: string) => v.slice(5)} stroke="var(--muted-foreground)" fontSize={12} />
+                <YAxis domain={[0, 100]} stroke="var(--muted-foreground)" fontSize={12} tickFormatter={(v: number) => `${v}%`} />
+                <Tooltip formatter={(value: any) => [`${value}%`, '正确率']} labelFormatter={(label: any) => `日期: ${label}`} />
+                <Line type="monotone" dataKey="accuracy" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="rounded-lg border border-border p-4 space-y-3">
+            <h3 className="font-semibold text-sm">各科刷题量对比</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={subjectStats}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="subject" stroke="var(--muted-foreground)" fontSize={12} />
+                <YAxis stroke="var(--muted-foreground)" fontSize={12} />
+                <Tooltip />
+                <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="刷题量" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="rounded-lg border border-border p-4 space-y-3">
+            <h3 className="font-semibold text-sm">各科正确率对比</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={subjectStats}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="subject" stroke="var(--muted-foreground)" fontSize={12} />
+                <YAxis domain={[0, 100]} stroke="var(--muted-foreground)" fontSize={12} tickFormatter={(v: number) => `${v}%`} />
+                <Tooltip formatter={(value: any) => [`${value}%`, '正确率']} />
+                <Bar dataKey="accuracy" radius={[4, 4, 0, 0]} name="正确率">
+                  {subjectStats.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.accuracy >= 70 ? '#22c55e' : entry.accuracy >= 40 ? '#f59e0b' : '#ef4444'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="rounded-lg border border-border p-4 space-y-3">
+            <h3 className="font-semibold text-sm">学习活跃度</h3>
+            <div className="flex flex-wrap gap-1">
+              {trend60.map((d) => {
+                const level = d.total === 0 ? 0 : d.total <= 5 ? 1 : d.total <= 15 ? 2 : 3;
+                const colors = ['bg-muted', 'bg-green-200 dark:bg-green-900', 'bg-green-400 dark:bg-green-700', 'bg-green-600 dark:bg-green-500'];
+                return (
+                  <div
+                    key={d.date}
+                    className={`w-3 h-3 rounded-sm ${colors[level]}`}
+                    title={`${d.date}: ${d.total} 题`}
+                  />
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
+              <span>少</span>
+              <div className="w-3 h-3 rounded-sm bg-muted" />
+              <div className="w-3 h-3 rounded-sm bg-green-200 dark:bg-green-900" />
+              <div className="w-3 h-3 rounded-sm bg-green-400 dark:bg-green-700" />
+              <div className="w-3 h-3 rounded-sm bg-green-600 dark:bg-green-500" />
+              <span>多</span>
             </div>
           </div>
         </>

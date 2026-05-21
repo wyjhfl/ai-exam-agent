@@ -2,30 +2,50 @@ import os
 import logging
 from pathlib import Path
 from datetime import datetime
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from db.database import get_session
 from db.models import User
+from core.auth import get_current_user
 from core.document_processor import DocumentProcessor
 from core.rag.engine import RAGEngine
+import aiofiles
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 rag_engine = RAGEngine()
 
+
+def _get_limiter():
+    from main import limiter
+    return limiter
+
+
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", str(_PROJECT_ROOT / "data" / "uploads")))
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024
+
+
+def safe_file_path(user_dir: Path, file_id: str) -> Path:
+    if ".." in file_id or "/" in file_id or "\\" in file_id:
+        raise HTTPException(status_code=400, detail="无效的文件 ID")
+    path = (user_dir / file_id).resolve()
+    if not str(path).startswith(str(user_dir.resolve())):
+        raise HTTPException(status_code=400, detail="路径越界")
+    return path
 
 
 @router.post("/upload")
 async def upload_file(
-    user_id: int = Form(...),
+    http_request: Request,
     subject: str = Form("数学"),
     file_type: str = Form("教辅资料"),
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
+    user_id = current_user.id
     result = await session.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -44,9 +64,14 @@ async def upload_file(
     safe_name = f"{timestamp}_{filename}"
     file_path = user_dir / safe_name
 
-    content = await file.read()
-    with open(file_path, "wb") as f:
-        f.write(content)
+    content = bytearray()
+    while chunk := await file.read(1024 * 1024):
+        content.extend(chunk)
+        if len(content) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="文件过大，限制 50MB")
+
+    async with aiofiles.open(file_path, "wb") as f:
+        await f.write(content)
 
     try:
         text = DocumentProcessor.process_file(str(file_path))
@@ -80,8 +105,9 @@ async def upload_file(
     }
 
 
-@router.get("/{user_id}")
-async def list_uploads(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.get("")
+async def list_uploads(session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    user_id = current_user.id
     user_dir = UPLOAD_DIR / str(user_id)
     if not user_dir.exists():
         return {"files": []}
@@ -108,9 +134,11 @@ async def list_uploads(user_id: int, session: AsyncSession = Depends(get_session
     return {"files": files}
 
 
-@router.delete("/{user_id}/{file_id}")
-async def delete_upload(user_id: int, file_id: str, session: AsyncSession = Depends(get_session)):
-    file_path = UPLOAD_DIR / str(user_id) / file_id
+@router.delete("/{file_id}")
+async def delete_upload(file_id: str, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    user_id = current_user.id
+    user_dir = UPLOAD_DIR / str(user_id)
+    file_path = safe_file_path(user_dir, file_id)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="文件不存在")
 
@@ -124,9 +152,11 @@ async def delete_upload(user_id: int, file_id: str, session: AsyncSession = Depe
     return {"status": "ok", "message": "文件已删除"}
 
 
-@router.post("/{user_id}/{file_id}/reindex")
-async def reindex_upload(user_id: int, file_id: str, session: AsyncSession = Depends(get_session)):
-    file_path = UPLOAD_DIR / str(user_id) / file_id
+@router.post("/{file_id}/reindex")
+async def reindex_upload(file_id: str, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    user_id = current_user.id
+    user_dir = UPLOAD_DIR / str(user_id)
+    file_path = safe_file_path(user_dir, file_id)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="文件不存在")
 

@@ -2,7 +2,7 @@
 
 AI 驱动的考研备考桌面应用，基于 Tauri 2.0 + React + Python FastAPI 构建，支持政治/英语/数学三科备考。
 
-**当前版本：v0.6.0**
+**当前版本：v0.7.0**
 
 ## 功能概览
 
@@ -283,6 +283,34 @@ SQLite 本地数据库，包含以下表：
 - `mock_exams` — 模拟考试记录
 
 ## 更新日志
+
+### v0.7.0
+
+**新功能：**
+- 新增真题库系统（3 套示例真题：数学一/英语一/政治，支持按科目年份筛选）
+- 新增对话历史管理（多会话支持，新建/切换/重命名/删除对话）
+- 新增 API Rate Limit（12 个昂贵端点限流，防刷爆）
+- 新增数据清理机制（清理旧记录 + 孤立文件）
+- 健康检查增强（DB 连接检测 + degraded 状态）
+
+**安全加固：**
+- 新增 JWT 认证机制（所有 API 端点需登录）
+- 密码加固（bcrypt 替代 SHA-256，旧密码自动迁移）
+- 修复路径穿越漏洞（uploads.py safe_file_path）
+- 修复 SSRF 漏洞（resources.py is_safe_url 禁内网地址）
+- 增强 XSS 过滤（移除事件处理器 + javascript: 协议）
+
+**性能优化：**
+- 修复社区帖子 N+1 查询（改为 JOIN 查询）
+- CORS 从 * 改为白名单（Tauri + localhost）
+- SQLite WAL 模式 + busy_timeout
+- 文件上传大小限制（50MB）
+- 阻塞 I/O 改异步（aiofiles）
+- Pydantic 输入校验（9 个新 model 替换 dict）
+
+**其他：**
+- 检查更新功能优化（显示下载链接 + 更新日志）
+- 补充 exam_papers / conversations 测试
 
 ### v0.6.0
 

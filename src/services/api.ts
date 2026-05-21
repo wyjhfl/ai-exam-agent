@@ -1,10 +1,22 @@
 import axios from "axios";
 import { toast } from "sonner";
 
+function getStoredToken(): string | null {
+  return localStorage.getItem("ai_exam_token");
+}
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000",
   headers: { "Content-Type": "application/json" },
   timeout: 60000,
+});
+
+api.interceptors.request.use((config) => {
+  const token = getStoredToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 api.interceptors.response.use(
@@ -13,6 +25,17 @@ api.interceptors.response.use(
     const status = error.response?.status;
     const url = error.config?.url;
     const detail = error.response?.data?.detail || error.response?.data?.error;
+
+    if (status === 401) {
+      localStorage.removeItem("ai_exam_token");
+      localStorage.removeItem("ai_exam_user_id");
+      localStorage.removeItem("ai_exam_username");
+      if (!url?.includes("/api/user/login") && !url?.includes("/api/user/register")) {
+        toast.error("登录已过期，请重新登录");
+        window.location.href = "/login";
+      }
+      return Promise.reject(error);
+    }
 
     if (!error.response) {
       toast.error("网络连接失败，请检查后端服务");
@@ -47,28 +70,38 @@ export async function getUser(userId: number) {
   return data;
 }
 
-export async function sendMessage(message: string, userId: number) {
-  const { data } = await api.post("/api/chat/message", { message, user_id: userId });
+export async function sendMessage(message: string, conversationId?: number | null) {
+  const payload: Record<string, any> = { message };
+  if (conversationId) payload.conversation_id = conversationId;
+  const { data } = await api.post("/api/chat/message", payload);
   return data;
 }
 
-export async function fetchHistory(userId: number, limit: number = 50) {
-  const { data } = await api.get(`/api/chat/history/${userId}`, { params: { limit } });
+export async function fetchHistory(limit: number = 50, conversationId?: number) {
+  const params: Record<string, any> = { limit };
+  if (conversationId) params.conversation_id = conversationId;
+  const { data } = await api.get("/api/chat/history", { params });
   return data;
 }
 
 export async function fetchStreamMessage(
   message: string,
-  userId: number,
   onChunk: (text: string) => void,
   onDone: () => void,
-  onSources?: (sources: Record<string, any>[]) => void
+  onSources?: (sources: Record<string, any>[]) => void,
+  conversationId?: number | null,
+  onConversationId?: (id: number) => void
 ) {
   const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+  const token = getStoredToken();
+  const payload: Record<string, any> = { message };
+  if (conversationId) payload.conversation_id = conversationId;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   const response = await fetch(`${baseURL}/api/chat/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, user_id: userId }),
+    headers,
+    body: JSON.stringify(payload),
   });
 
   const reader = response.body?.getReader();
@@ -96,6 +129,8 @@ export async function fetchStreamMessage(
           const parsed = JSON.parse(data);
           if (parsed.type === "sources" && onSources) {
             onSources(parsed.sources);
+          } else if (parsed.type === "conversation_id" && onConversationId) {
+            onConversationId(parsed.conversation_id);
           } else if (parsed.content) {
             onChunk(parsed.content);
           }
@@ -143,17 +178,16 @@ export async function generateQuizQuestions(subject: string, topic: string, diff
   return data;
 }
 
-export async function submitAnswer(userId: number, questionId: number, selectedAnswer: string) {
+export async function submitAnswer(questionId: number, selectedAnswer: string) {
   const { data } = await api.post("/api/quiz/answer", {
-    user_id: userId,
     question_id: questionId,
     selected_answer: selectedAnswer,
   });
   return data;
 }
 
-export async function fetchWrongQuestions(userId: number) {
-  const { data } = await api.get(`/api/quiz/wrong/${userId}`);
+export async function fetchWrongQuestions() {
+  const { data } = await api.get("/api/quiz/wrong");
   return data;
 }
 
@@ -162,8 +196,8 @@ export async function markWrongMastered(id: number) {
   return data;
 }
 
-export async function fetchReviewQuestions(userId: number) {
-  const { data } = await api.get(`/api/quiz/review/${userId}`);
+export async function fetchReviewQuestions() {
+  const { data } = await api.get("/api/quiz/review");
   return data;
 }
 
@@ -172,9 +206,8 @@ export async function submitReviewAnswer(wrongId: number, isCorrect: boolean) {
   return data;
 }
 
-export async function generatePlan(userId: number, targetSchool: string, targetMajor: string, examDate: string, subjects: Record<string, number>) {
+export async function generatePlan(targetSchool: string, targetMajor: string, examDate: string, subjects: Record<string, number>) {
   const { data } = await api.post("/api/plan/generate", {
-    user_id: userId,
     target_school: targetSchool,
     target_major: targetMajor,
     exam_date: examDate,
@@ -183,8 +216,8 @@ export async function generatePlan(userId: number, targetSchool: string, targetM
   return data;
 }
 
-export async function fetchPlan(userId: number) {
-  const { data } = await api.get(`/api/plan/${userId}`);
+export async function fetchPlan() {
+  const { data } = await api.get("/api/plan");
   return data;
 }
 
@@ -193,33 +226,33 @@ export async function updatePlan(planId: number, planData: Record<string, any>) 
   return data;
 }
 
-export async function fetchAnalysisOverview(userId: number) {
-  const { data } = await api.get(`/api/analysis/${userId}/overview`);
+export async function fetchAnalysisOverview() {
+  const { data } = await api.get("/api/analysis/overview");
   return data;
 }
 
-export async function fetchSubjectStats(userId: number) {
-  const { data } = await api.get(`/api/analysis/${userId}/subject-stats`);
+export async function fetchSubjectStats() {
+  const { data } = await api.get("/api/analysis/subject-stats");
   return data;
 }
 
-export async function fetchTrend(userId: number) {
-  const { data } = await api.get(`/api/analysis/${userId}/trend`);
+export async function fetchTrend(days: number = 7) {
+  const { data } = await api.get("/api/analysis/trend", { params: { days } });
   return data;
 }
 
-export async function evaluateWriting(text: string, essayType: string, userId: number) {
-  const { data } = await api.post("/api/writing/evaluate", { text, essay_type: essayType, user_id: userId });
+export async function evaluateWriting(text: string, essayType: string) {
+  const { data } = await api.post("/api/writing/evaluate", { text, essay_type: essayType });
   return data;
 }
 
-export async function fetchWritingHistory(userId: number) {
-  const { data } = await api.get(`/api/writing/history/${userId}`);
+export async function fetchWritingHistory() {
+  const { data } = await api.get("/api/writing/history");
   return data;
 }
 
-export async function startFocus(userId: number, subject: string, duration: number) {
-  const { data } = await api.post("/api/focus/start", { user_id: userId, subject, duration });
+export async function startFocus(subject: string, duration: number) {
+  const { data } = await api.post("/api/focus/start", { subject, duration });
   return data;
 }
 
@@ -228,28 +261,31 @@ export async function completeFocus(sessionId: number, actualDuration: number) {
   return data;
 }
 
-export async function fetchTodayFocus(userId: number) {
-  const { data } = await api.get(`/api/focus/today/${userId}`);
+export async function fetchTodayFocus() {
+  const { data } = await api.get("/api/focus/today");
   return data;
 }
 
-export function getExportUrl(userId: number, type: "wrong-questions" | "study-summary", format: "json" | "excel" | "pdf" = "excel") {
+export function getExportUrl(type: "wrong-questions" | "study-summary", format: "json" | "excel" | "pdf" = "excel") {
   const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+  const token = getStoredToken();
+  const separator = type.includes("?") ? "&" : "?";
+  const authParam = token ? `${separator}token=${token}` : "";
   if (format === "pdf") {
-    return `${baseURL}/api/export/${userId}/${type}/pdf`;
+    return `${baseURL}/api/export/${type}/pdf${authParam}`;
   }
   if (format === "excel") {
-    return `${baseURL}/api/export/${userId}/${type}/excel`;
+    return `${baseURL}/api/export/${type}/excel${authParam}`;
   }
-  return `${baseURL}/api/export/${userId}/${type}`;
+  return `${baseURL}/api/export/${type}${authParam}`;
 }
 
-export const APP_VERSION = "0.6.0";
+export const APP_VERSION = "0.7.0";
 
-export async function uploadFile(userId: number, subject: string, fileType: string, file: File, onProgress?: (pct: number) => void) {
+export async function uploadFile(subject: string, fileType: string, file: File, onProgress?: (pct: number) => void) {
   const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+  const token = getStoredToken();
   const formData = new FormData();
-  formData.append("user_id", String(userId));
   formData.append("subject", subject);
   formData.append("file_type", fileType);
   formData.append("file", file);
@@ -257,6 +293,7 @@ export async function uploadFile(userId: number, subject: string, fileType: stri
   return new Promise<{ file_id: string; filename: string; subject: string; file_type: string; pages: number; chunks: number; size: number }>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${baseURL}/api/uploads/upload`);
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
     };
@@ -272,62 +309,95 @@ export async function uploadFile(userId: number, subject: string, fileType: stri
   });
 }
 
-export async function fetchUploads(userId: number) {
-  const { data } = await api.get(`/api/uploads/${userId}`);
+export async function fetchUploads() {
+  const { data } = await api.get("/api/uploads");
   return data;
 }
 
-export async function deleteUpload(userId: number, fileId: string) {
-  const { data } = await api.delete(`/api/uploads/${userId}/${fileId}`);
+export async function deleteUpload(fileId: string) {
+  const { data } = await api.delete(`/api/uploads/${fileId}`);
   return data;
 }
 
-export async function reindexUpload(userId: number, fileId: string) {
-  const { data } = await api.post(`/api/uploads/${userId}/${fileId}/reindex`);
+export async function reindexUpload(fileId: string) {
+  const { data } = await api.post(`/api/uploads/${fileId}/reindex`);
   return data;
 }
 
-export async function generateStudyPlanFromMaterials(userId: number, subject: string) {
-  const { data } = await api.post("/api/guidance/study-plan", { user_id: userId, subject });
+export async function generateStudyPlanFromMaterials(subject: string) {
+  const { data } = await api.post("/api/guidance/study-plan", { subject });
   return data;
 }
 
-export async function explainTopic(userId: number, topic: string) {
-  const { data } = await api.post("/api/guidance/explain", { user_id: userId, topic });
+export async function explainTopic(topic: string) {
+  const { data } = await api.post("/api/guidance/explain", { topic });
   return data;
 }
 
-export async function solveQuestion(userId: number, questionText: string) {
-  const { data } = await api.post("/api/guidance/solve", { user_id: userId, question_text: questionText });
+export async function solveQuestion(questionText: string) {
+  const { data } = await api.post("/api/guidance/solve", { question_text: questionText });
   return data;
 }
 
-export async function checkForUpdate(): Promise<{ hasUpdate: boolean; currentVersion: string; message: string }> {
-  return { hasUpdate: false, currentVersion: APP_VERSION, message: `当前已是最新版本 v${APP_VERSION}` };
+function compareVersions(a: string, b: string): number {
+  const pa = a.replace(/^v/, "").split(".").map(Number);
+  const pb = b.replace(/^v/, "").split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+  }
+  return 0;
 }
 
-export async function syncUpload(userId: number, dataType: string, data: Record<string, any>[]) {
-  const { data: result } = await api.post("/api/sync/upload", { user_id: userId, data_type: dataType, data });
+export async function checkForUpdate(): Promise<{ hasUpdate: boolean; currentVersion: string; latestVersion: string; message: string; downloadUrl: string; releaseNotes: string }> {
+  try {
+    const res = await fetch("https://api.github.com/repos/wyjhfl/ai-exam-agent/releases/latest", {
+      headers: { Accept: "application/vnd.github+json" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return { hasUpdate: false, currentVersion: APP_VERSION, latestVersion: APP_VERSION, message: `当前版本 v${APP_VERSION}`, downloadUrl: "", releaseNotes: "" };
+    const release = await res.json();
+    const latestVersion = release.tag_name.replace(/^v/, "");
+    const hasUpdate = compareVersions(latestVersion, APP_VERSION) > 0;
+    const downloadUrl = release.html_url || "";
+    const releaseNotes = (release.body || "").slice(0, 200);
+    return {
+      hasUpdate,
+      currentVersion: APP_VERSION,
+      latestVersion,
+      message: hasUpdate
+        ? `发现新版本 v${latestVersion}，当前版本 v${APP_VERSION}`
+        : `当前已是最新版本 v${APP_VERSION}`,
+      downloadUrl: hasUpdate ? downloadUrl : "",
+      releaseNotes: hasUpdate ? releaseNotes : "",
+    };
+  } catch {
+    return { hasUpdate: false, currentVersion: APP_VERSION, latestVersion: APP_VERSION, message: `当前版本 v${APP_VERSION}（检查更新失败）`, downloadUrl: "", releaseNotes: "" };
+  }
+}
+
+export async function syncUpload(dataType: string, data: Record<string, any>[]) {
+  const { data: result } = await api.post("/api/sync/upload", { data_type: dataType, data });
   return result;
 }
 
-export async function syncDownload(userId: number, dataType: string = "all") {
-  const { data } = await api.post("/api/sync/download", { user_id: userId, data_type: dataType });
+export async function syncDownload(dataType: string = "all") {
+  const { data } = await api.post("/api/sync/download", { data_type: dataType });
   return data;
 }
 
-export async function syncFull(userId: number, localData: Record<string, any[]>) {
-  const { data } = await api.post("/api/sync/full", { user_id: userId, local_data: localData });
+export async function syncFull(localData: Record<string, any[]>) {
+  const { data } = await api.post("/api/sync/full", { local_data: localData });
   return data;
 }
 
-export async function fetchSyncStatus(userId: number) {
-  const { data } = await api.get(`/api/sync/status/${userId}`);
+export async function fetchSyncStatus() {
+  const { data } = await api.get("/api/sync/status");
   return data;
 }
 
-export async function communityShare(userId: number, title: string, content: string, itemType: string, subject: string) {
-  const { data } = await api.post("/api/community/share", { user_id: userId, title, content, item_type: itemType, subject });
+export async function communityShare(title: string, content: string, itemType: string, subject: string) {
+  const { data } = await api.post("/api/community/share", { title, content, item_type: itemType, subject });
   return data;
 }
 
@@ -349,8 +419,8 @@ export async function likeCommunityPost(postId: number) {
   return data;
 }
 
-export async function commentCommunityPost(postId: number, userId: number, content: string) {
-  const { data } = await api.post(`/api/community/posts/${postId}/comment`, { user_id: userId, content });
+export async function commentCommunityPost(postId: number, content: string) {
+  const { data } = await api.post(`/api/community/posts/${postId}/comment`, { content });
   return data;
 }
 
@@ -359,8 +429,8 @@ export async function shareWrongToCommunity(wrongId: number) {
   return data;
 }
 
-export async function startMockExam(userId: number, subject: string, count: number, duration: number) {
-  const { data } = await api.post("/api/quiz/mock-exam", { user_id: userId, subject, question_count: count, duration_minutes: duration });
+export async function startMockExam(subject: string, count: number, duration: number) {
+  const { data } = await api.post("/api/quiz/mock-exam", { subject, question_count: count, duration_minutes: duration });
   return data;
 }
 
@@ -378,8 +448,8 @@ export async function getKnowledgeTree(subject?: string) {
   return data;
 }
 
-export async function getUserMastery(userId: number) {
-  const { data } = await api.get(`/api/knowledge-points/${userId}/mastery`);
+export async function getUserMastery() {
+  const { data } = await api.get("/api/knowledge-points/mastery");
   return data;
 }
 
@@ -390,8 +460,8 @@ export async function searchResources(query: string, subject?: string) {
   return data;
 }
 
-export async function downloadResource(url: string, userId: number, subject: string, fileType: string) {
-  const { data } = await api.post("/api/resources/download", { url, user_id: userId, subject, file_type: fileType });
+export async function downloadResource(url: string, subject: string, fileType: string) {
+  const { data } = await api.post("/api/resources/download", { url, subject, file_type: fileType });
   return data;
 }
 
@@ -400,68 +470,121 @@ export async function generateFromUrl(url: string, subject: string, questionType
   return data;
 }
 
-export async function fetchAdaptiveQuestions(userId: number, count: number = 5, subject?: string) {
-  const { data } = await api.post("/api/quiz/adaptive", { user_id: userId, count, subject });
+export async function fetchAdaptiveQuestions(count: number = 5, subject?: string) {
+  const { data } = await api.post("/api/quiz/adaptive", { count, subject });
   return data;
 }
 
-export async function fetchWeakPoints(userId: number) {
-  const { data } = await api.get(`/api/analysis/${userId}/weak-points`);
+export async function fetchWeakPoints() {
+  const { data } = await api.get("/api/analysis/weak-points");
   return data;
 }
 
-export async function fetchMockExamHistory(userId: number, limit: number = 10) {
-  const { data } = await api.get(`/api/quiz/mock-exam/history/${userId}`, { params: { limit } });
+export async function fetchMockExamHistory(limit: number = 10) {
+  const { data } = await api.get("/api/quiz/mock-exam/history", { params: { limit } });
   return data;
 }
 
-export async function fetchWeeklyReport(userId: number) {
-  const { data } = await api.get(`/api/analysis/${userId}/weekly-report`);
+export async function fetchWeeklyReport() {
+  const { data } = await api.get("/api/analysis/weekly-report");
   return data;
 }
 
-export async function globalSearch(userId: number, query: string, type: string = "all", page: number = 1) {
-  const { data } = await api.get(`/api/search/${userId}`, { params: { q: query, type, page } });
+export async function globalSearch(query: string, type: string = "all", page: number = 1) {
+  const { data } = await api.get("/api/search", { params: { q: query, type, page } });
   return data;
 }
 
-export async function checkIn(userId: number) {
-  const { data } = await api.post(`/api/streak/${userId}/checkin`);
+export async function checkIn() {
+  const { data } = await api.post("/api/streak/checkin");
   return data;
 }
 
-export async function fetchStreak(userId: number) {
-  const { data } = await api.get(`/api/streak/${userId}`);
+export async function fetchStreak() {
+  const { data } = await api.get("/api/streak");
   return data;
 }
 
-export async function fetchLLMConfig(userId: number) {
-  const { data } = await api.get(`/api/settings/${userId}/llm`);
+export async function fetchLLMConfig() {
+  const { data } = await api.get("/api/settings/llm");
   return data;
 }
 
-export async function updateLLMConfig(userId: number, config: { api_key?: string; base_url?: string; model?: string }) {
-  const { data } = await api.put(`/api/settings/${userId}/llm`, config);
+export async function updateLLMConfig(config: { api_key?: string; base_url?: string; model?: string }) {
+  const { data } = await api.put("/api/settings/llm", config);
   return data;
 }
 
-export async function testLLMConfig(userId: number) {
-  const { data } = await api.post(`/api/settings/${userId}/llm/test`);
+export async function testLLMConfig() {
+  const { data } = await api.post("/api/settings/llm/test");
   return data;
 }
 
-export async function resetLLMConfig(userId: number) {
-  const { data } = await api.delete(`/api/settings/${userId}/llm`);
+export async function resetLLMConfig() {
+  const { data } = await api.delete("/api/settings/llm");
   return data;
 }
 
-export async function guidedTeaching(userId: number, message: string, topic: string, hintLevel: number = 0) {
-  const { data } = await api.post("/api/chat/guided", { user_id: userId, message, topic, hint_level: hintLevel });
+export async function guidedTeaching(message: string, topic: string, hintLevel: number = 0, conversationId?: number | null) {
+  const payload: Record<string, any> = { message, topic, hint_level: hintLevel };
+  if (conversationId) payload.conversation_id = conversationId;
+  const { data } = await api.post("/api/chat/guided", payload);
   return data;
 }
 
-export async function fetchReminders(userId: number) {
-  const { data } = await api.get(`/api/reminders/${userId}`);
+export async function fetchConversations() {
+  const { data } = await api.get("/api/conversations");
+  return data;
+}
+
+export async function createConversation(title?: string, mode?: string) {
+  const payload: Record<string, any> = {};
+  if (title) payload.title = title;
+  if (mode) payload.chat_mode = mode;
+  const { data } = await api.post("/api/conversations", payload);
+  return data;
+}
+
+export async function fetchConversationDetail(conversationId: number) {
+  const { data } = await api.get(`/api/conversations/detail/${conversationId}`);
+  return data;
+}
+
+export async function renameConversation(conversationId: number, title: string) {
+  const { data } = await api.put(`/api/conversations/${conversationId}`, { title });
+  return data;
+}
+
+export async function deleteConversation(conversationId: number) {
+  const { data } = await api.delete(`/api/conversations/${conversationId}`);
+  return data;
+}
+
+export async function fetchReminders() {
+  const { data } = await api.get("/api/reminders");
+  return data;
+}
+
+export async function fetchExamPapers(subject?: string, year?: number) {
+  const params: Record<string, string> = {};
+  if (subject && subject !== "全部") params.subject = subject;
+  if (year) params.year = String(year);
+  const { data } = await api.get("/api/exam-papers", { params });
+  return data;
+}
+
+export async function fetchExamPaperDetail(paperId: number) {
+  const { data } = await api.get(`/api/exam-papers/${paperId}`);
+  return data;
+}
+
+export async function startExam(paperId: number) {
+  const { data } = await api.post(`/api/exam-papers/${paperId}/start`);
+  return data;
+}
+
+export async function submitExam(paperId: number, answers: { question_id: number; selected_answer: string }[], durationSeconds: number) {
+  const { data } = await api.post(`/api/exam-papers/${paperId}/submit`, { answers, duration_seconds: durationSeconds });
   return data;
 }
 

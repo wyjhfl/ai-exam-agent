@@ -46,7 +46,7 @@ function MaterialsPage() {
   const loadFiles = useCallback(async () => {
     if (!userId) return;
     try {
-      const data = await fetchUploads(userId);
+      const data = await fetchUploads();
       setFiles(data.files || []);
     } catch {
       toast.error("加载文件列表失败");
@@ -68,7 +68,7 @@ function MaterialsPage() {
     setUploading(true);
     setProgress(0);
     try {
-      const result = await uploadFile(userId, selectedSubject, selectedFileType, file, setProgress);
+      const result = await uploadFile(selectedSubject, selectedFileType, file, setProgress);
       toast.success(`上传成功！${result.filename} (${result.chunks} 个文本块)`);
       loadFiles();
     } catch (e: any) {
@@ -82,7 +82,7 @@ function MaterialsPage() {
   const handleDelete = async (fileId: string) => {
     if (!userId) return;
     try {
-      await deleteUpload(userId, fileId);
+      await deleteUpload(fileId);
       toast.success("文件已删除");
       loadFiles();
     } catch {
@@ -94,7 +94,7 @@ function MaterialsPage() {
     if (!userId) return;
     setReindexingId(fileId);
     try {
-      const result = await reindexUpload(userId, fileId);
+      const result = await reindexUpload(fileId);
       toast.success(`重新索引完成，${result.chunks} 个文本块`);
       loadFiles();
     } catch {
@@ -126,7 +126,7 @@ function MaterialsPage() {
     if (!userId) return;
     setDownloadingUrl(url);
     try {
-      const result = await downloadResource(url, userId, searchSubject || "数学", "教辅资料");
+      const result = await downloadResource(url, searchSubject || "数学", "教辅资料");
       if (result.error) {
         toast.error(result.error);
       } else {

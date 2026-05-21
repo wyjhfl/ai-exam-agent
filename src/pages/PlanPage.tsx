@@ -43,7 +43,7 @@ function PlanPage() {
   const loadPlan = async () => {
     if (!userId) return;
     try {
-      const data = await fetchPlan(userId);
+      const data = await fetchPlan();
       if (data.plan_data) {
         setPlan(data.plan_data as PlanData);
         if (data.target_school) setTargetSchool(data.target_school);
@@ -58,7 +58,7 @@ function PlanPage() {
     if (!userId) return;
     setLoading(true);
     try {
-      const data = await generatePlan(userId, targetSchool || "未定", targetMajor || "未定", examDate, subjects);
+      const data = await generatePlan(targetSchool || "未定", targetMajor || "未定", examDate, subjects);
       setPlan(data.plan_data as PlanData);
       toast.success("计划生成成功！");
     } catch {
@@ -71,7 +71,7 @@ function PlanPage() {
     if (!userId) return;
     setMaterialPlanLoading(true);
     try {
-      const data = await generateStudyPlanFromMaterials(userId, materialPlanSubject);
+      const data = await generateStudyPlanFromMaterials(materialPlanSubject);
       setMaterialPlan(data.plan);
       toast.success("基于教辅的计划生成成功！");
     } catch {

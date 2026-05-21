@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Home, MessageSquare, BookMarked, BookOpen, BarChart3, PenLine, Timer, Sun, Moon, Monitor, PanelLeftClose, PanelLeft, User, LogOut, RefreshCw, FolderOpen, Users, Network, ClipboardList, Search, Settings } from "lucide-react";
+import { Home, MessageSquare, BookMarked, FileText, BookOpen, BarChart3, PenLine, Timer, Sun, Moon, Monitor, PanelLeftClose, PanelLeft, User, LogOut, RefreshCw, FolderOpen, Users, Network, ClipboardList, Search, Settings } from "lucide-react";
 import { useAppStore } from "@/stores/appStore";
 import { useUserStore } from "@/stores/userStore";
 import { useSyncStore } from "@/stores/syncStore";
@@ -12,6 +12,7 @@ const navItems = [
   { to: "/chat", icon: MessageSquare, label: "对话" },
   { to: "/materials", icon: FolderOpen, label: "资料" },
   { to: "/quiz", icon: BookMarked, label: "刷题" },
+  { to: "/exam-papers", icon: FileText, label: "真题库" },
   { to: "/writing", icon: PenLine, label: "作文" },
   { to: "/plan", icon: BookOpen, label: "规划" },
   { to: "/analysis", icon: BarChart3, label: "分析" },
@@ -31,7 +32,7 @@ function Sidebar({ onOpenSearch }: { onOpenSearch: () => void }) {
 
   useEffect(() => {
     if (userId) {
-      fetchReminders(userId).then((data) => {
+      fetchReminders().then((data) => {
         const review = (data.reminders || []).find((r: any) => r.type === "review");
         setDueCount(review?.count || 0);
       }).catch(() => {});
@@ -39,7 +40,7 @@ function Sidebar({ onOpenSearch }: { onOpenSearch: () => void }) {
   }, [userId]);
 
   const handleSync = () => {
-    if (userId) syncNow(userId);
+    if (userId) syncNow();
   };
 
   const formatSyncTime = (ts: number | null) => {
@@ -56,7 +57,25 @@ function Sidebar({ onOpenSearch }: { onOpenSearch: () => void }) {
     try {
       const result = await checkForUpdate();
       if (result.hasUpdate) {
-        toast.info(`发现新版本！${result.message}`);
+        toast.info(
+          <div>
+            <p className="font-medium">发现新版本 v{result.latestVersion}</p>
+            {result.releaseNotes && (
+              <p className="text-xs text-muted-foreground mt-1">{result.releaseNotes}</p>
+            )}
+            {result.downloadUrl && (
+              <a
+                href={result.downloadUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary underline mt-1 inline-block"
+              >
+                前往下载 →
+              </a>
+            )}
+          </div>,
+          { duration: 10000 }
+        );
       } else {
         toast.success(result.message);
       }

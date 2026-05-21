@@ -1,5 +1,9 @@
 import logging
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from db.database import get_session
+from db.models import User
+from core.auth import get_current_user
 from models.schemas import GuidanceStudyPlanRequest, GuidanceExplainRequest, GuidanceSolveRequest
 from core.study_guide import StudyGuide
 
@@ -8,9 +12,9 @@ router = APIRouter()
 
 
 @router.post("/study-plan")
-async def generate_study_plan(request: GuidanceStudyPlanRequest):
+async def generate_study_plan(request: GuidanceStudyPlanRequest, current_user: User = Depends(get_current_user)):
     try:
-        result = StudyGuide.generate_study_plan(request.user_id, request.subject)
+        result = StudyGuide.generate_study_plan(current_user.id, request.subject)
         return {"plan": result}
     except Exception as e:
         logger.error(f"Generate study plan failed: {e}")
@@ -18,9 +22,9 @@ async def generate_study_plan(request: GuidanceStudyPlanRequest):
 
 
 @router.post("/explain")
-async def explain_topic(request: GuidanceExplainRequest):
+async def explain_topic(request: GuidanceExplainRequest, current_user: User = Depends(get_current_user)):
     try:
-        result = StudyGuide.explain_topic(request.user_id, request.topic)
+        result = StudyGuide.explain_topic(current_user.id, request.topic)
         return {"explanation": result}
     except Exception as e:
         logger.error(f"Explain topic failed: {e}")
@@ -28,9 +32,9 @@ async def explain_topic(request: GuidanceExplainRequest):
 
 
 @router.post("/solve")
-async def solve_question(request: GuidanceSolveRequest):
+async def solve_question(request: GuidanceSolveRequest, current_user: User = Depends(get_current_user)):
     try:
-        result = StudyGuide.solve_question(request.user_id, request.question_text)
+        result = StudyGuide.solve_question(current_user.id, request.question_text)
         return {"solution": result}
     except Exception as e:
         logger.error(f"Solve question failed: {e}")

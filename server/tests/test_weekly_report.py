@@ -1,11 +1,11 @@
 import pytest
+from db.models import QuizQuestion
 
 
 @pytest.mark.asyncio
-async def test_weekly_report_empty(client):
-    user_resp = await client.post("/api/user/create", json={"username": "report_user"})
-    user_id = user_resp.json()["id"]
-    resp = await client.get(f"/api/analysis/{user_id}/weekly-report")
+async def test_weekly_report_empty(auth_client):
+    client, _ = auth_client
+    resp = await client.get("/api/analysis/weekly-report")
     assert resp.status_code == 200
     data = resp.json()
     assert data["stats"]["total_quiz"] == 0
@@ -13,11 +13,8 @@ async def test_weekly_report_empty(client):
 
 
 @pytest.mark.asyncio
-async def test_weekly_report_with_data(client, db_session):
-    from db.models import QuizQuestion
-
-    user_resp = await client.post("/api/user/create", json={"username": "report_user2"})
-    user_id = user_resp.json()["id"]
+async def test_weekly_report_with_data(auth_client, db_session):
+    client, _ = auth_client
     q = QuizQuestion(
         subject="数学",
         topic="极限",
@@ -33,9 +30,9 @@ async def test_weekly_report_with_data(client, db_session):
     await db_session.refresh(q)
     await client.post(
         "/api/quiz/answer",
-        json={"user_id": user_id, "question_id": q.id, "selected_answer": "B"},
+        json={"question_id": q.id, "selected_answer": "B"},
     )
-    resp = await client.get(f"/api/analysis/{user_id}/weekly-report")
+    resp = await client.get("/api/analysis/weekly-report")
     assert resp.status_code == 200
     data = resp.json()
     assert data["stats"]["total_quiz"] == 1

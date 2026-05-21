@@ -7,18 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, Integer
 from db.database import get_session
 from db.models import User, WrongQuestion, QuizQuestion, QuizRecord, StudySession, StudyPlan
+from core.auth import get_current_user
 from models.schemas import UserInfo
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/{user_id}/wrong-questions")
-async def export_wrong_questions(user_id: int, session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+@router.get("/wrong-questions")
+async def export_wrong_questions(session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    user_id = current_user.id
 
     result = await session.execute(
         select(WrongQuestion, QuizQuestion)
@@ -60,15 +58,12 @@ async def export_wrong_questions(user_id: int, session: AsyncSession = Depends(g
                 "mastered": False,
             })
 
-    return {"user_id": user_id, "username": user.username, "wrong_questions": items}
+    return {"user_id": user_id, "username": current_user.username, "wrong_questions": items}
 
 
-@router.get("/{user_id}/study-summary")
-async def export_study_summary(user_id: int, session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+@router.get("/study-summary")
+async def export_study_summary(session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    user_id = current_user.id
 
     total_quiz = await session.execute(
         select(func.count()).where(QuizRecord.user_id == user_id)
@@ -113,7 +108,7 @@ async def export_study_summary(user_id: int, session: AsyncSession = Depends(get
 
     return {
         "user_id": user_id,
-        "username": user.username,
+        "username": current_user.username,
         "total_quiz_count": total_quiz_count,
         "correct_count": correct_count,
         "accuracy": accuracy,
@@ -123,11 +118,11 @@ async def export_study_summary(user_id: int, session: AsyncSession = Depends(get
     }
 
 
-@router.get("/{user_id}/wrong-questions/excel")
-async def export_wrong_questions_excel(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.get("/wrong-questions/excel")
+async def export_wrong_questions_excel(session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
     from openpyxl import Workbook
 
-    data = await export_wrong_questions(user_id, session)
+    data = await export_wrong_questions(session, current_user)
 
     wb = Workbook()
     ws = wb.active
@@ -160,15 +155,15 @@ async def export_wrong_questions_excel(user_id: int, session: AsyncSession = Dep
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=wrong_questions_{user_id}.xlsx"},
+        headers={"Content-Disposition": f"attachment; filename=wrong_questions_{current_user.id}.xlsx"},
     )
 
 
-@router.get("/{user_id}/study-summary/excel")
-async def export_study_summary_excel(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.get("/study-summary/excel")
+async def export_study_summary_excel(session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
     from openpyxl import Workbook
 
-    data = await export_study_summary(user_id, session)
+    data = await export_study_summary(session, current_user)
 
     wb = Workbook()
     ws1 = wb.active
@@ -207,12 +202,12 @@ async def export_study_summary_excel(user_id: int, session: AsyncSession = Depen
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=study_summary_{user_id}.xlsx"},
+        headers={"Content-Disposition": f"attachment; filename=study_summary_{current_user.id}.xlsx"},
     )
 
 
-@router.get("/{user_id}/wrong-questions/pdf")
-async def export_wrong_questions_pdf(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.get("/wrong-questions/pdf")
+async def export_wrong_questions_pdf(session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
     from reportlab.lib.pagesizes import A4
     from reportlab.pdfgen import canvas
     from reportlab.lib.units import cm
@@ -234,7 +229,7 @@ async def export_wrong_questions_pdf(user_id: int, session: AsyncSession = Depen
         except Exception:
             pass
 
-    data = await export_wrong_questions(user_id, session)
+    data = await export_wrong_questions(session, current_user)
     username = data.get("username", "用户")
     items = data.get("wrong_questions", [])
 
@@ -315,5 +310,5 @@ async def export_wrong_questions_pdf(user_id: int, session: AsyncSession = Depen
     return StreamingResponse(
         buf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=wrong_questions_{user_id}.pdf"},
+        headers={"Content-Disposition": f"attachment; filename=wrong_questions_{current_user.id}.pdf"},
     )

@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "AI考研助手",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "identifier": "com.ai-exam-agent.app",
   "build": {
     "frontendDist": "../dist",
@@ -30,6 +30,9 @@
     "active": true,
     "targets": ["msi", "nsis"],
     "icon": ["icons/icon.ico"],
+    "externalBin": [
+      "binaries/ai-exam-backend"
+    ],
     "windows": {
       "nsis": {
         "installMode": "both"

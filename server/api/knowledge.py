@@ -1,7 +1,9 @@
 import os
 from pathlib import Path
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, Depends
 from core.rag.engine import RAGEngine
+from core.auth import get_current_user
+from db.models import User
 
 router = APIRouter()
 rag_engine = RAGEngine()
@@ -11,7 +13,7 @@ KNOWLEDGE_BASE_DIR = Path(os.getenv("KNOWLEDGE_BASE_DIR", str(_PROJECT_ROOT / "d
 
 
 @router.post("/upload")
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
     content = (await file.read()).decode("utf-8", errors="ignore")
     doc_id = file.filename or "unknown"
     rag_engine.index_document(doc_id, content, {"filename": doc_id})
@@ -19,7 +21,7 @@ async def upload_document(file: UploadFile = File(...)):
 
 
 @router.post("/index")
-async def index_knowledge_base():
+async def index_knowledge_base(current_user: User = Depends(get_current_user)):
     if not KNOWLEDGE_BASE_DIR.exists():
         return {"status": "error", "message": "Knowledge base directory not found"}
 
@@ -43,13 +45,13 @@ async def index_knowledge_base():
 
 
 @router.post("/reindex")
-async def reindex_knowledge_base():
+async def reindex_knowledge_base(current_user: User = Depends(get_current_user)):
     rag_engine.clear_collection()
     return await index_knowledge_base()
 
 
 @router.get("/status")
-async def knowledge_status():
+async def knowledge_status(current_user: User = Depends(get_current_user)):
     try:
         info = rag_engine.get_status()
         return {"status": "ok", **info}

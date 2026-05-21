@@ -3,13 +3,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime
 from db.database import get_session
-from db.models import WrongQuestion, StudyPlan
+from db.models import WrongQuestion, StudyPlan, User
+from core.auth import get_current_user
 
 router = APIRouter()
 
 
-@router.get("/{user_id}")
-async def get_reminders(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.get("")
+async def get_reminders(session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    user_id = current_user.id
     reminders = []
 
     now = datetime.now()

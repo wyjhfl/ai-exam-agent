@@ -1,15 +1,19 @@
 import os
+import re
 import hashlib
+import ipaddress
 import logging
 from urllib.parse import urlparse, unquote
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from db.database import get_session
-from db.models import QuizQuestion, UserUpload
+from db.models import QuizQuestion, UserUpload, User
+from core.auth import get_current_user
 from core.quiz.engine import QuizEngine
 from core.rag.engine import RAGEngine
-
+from models.schemas import ResourceDownload, ResourceGenerate
+import aiofiles
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -17,12 +21,29 @@ router = APIRouter()
 quiz_engine = QuizEngine()
 rag_engine = RAGEngine()
 
+
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "data", "uploads"))
 MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024
 
 
+def is_safe_url(url: str) -> bool:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return False
+    hostname = parsed.hostname
+    if not hostname:
+        return False
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if ip.is_private or ip.is_loopback or ip.is_link_local:
+            return False
+    except ValueError:
+        pass
+    return True
+
+
 @router.get("/search")
-async def search_resources(query: str, subject: str = None, resource_type: str = None, page: int = 1):
+async def search_resources(query: str, http_request: Request, subject: str = None, resource_type: str = None, page: int = 1, current_user: User = Depends(get_current_user)):
     search_query = f"考研 {query}"
     if subject:
         search_query += f" {subject}"
@@ -71,14 +92,17 @@ async def search_resources(query: str, subject: str = None, resource_type: str =
 
 
 @router.post("/download")
-async def download_resource(request: dict, session: AsyncSession = Depends(get_session)):
-    url = request.get("url")
-    user_id = request.get("user_id")
-    subject = request.get("subject", "")
-    file_type = request.get("file_type", "")
+async def download_resource(request: ResourceDownload, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    url = request.url
+    user_id = current_user.id
+    subject = request.subject
+    file_type = request.file_type
 
-    if not url or not user_id:
-        return {"error": "url and user_id are required"}
+    if not url:
+        return {"error": "url is required"}
+
+    if not is_safe_url(url):
+        raise HTTPException(status_code=400, detail="不安全的 URL")
 
     user_dir = os.path.join(UPLOAD_DIR, str(user_id))
     os.makedirs(user_dir, exist_ok=True)
@@ -100,6 +124,7 @@ async def download_resource(request: dict, session: AsyncSession = Depends(get_s
     filename = os.path.basename(unquote(parsed.path)) or ""
     if not filename or "." not in filename:
         filename = hashlib.md5(url.encode()).hexdigest()[:12]
+    filename = re.sub(r'[^\w\-.]', '_', filename)
 
     content_type = resp.headers.get("content-type", "")
     ext = os.path.splitext(filename)[1].lower()
@@ -119,8 +144,8 @@ async def download_resource(request: dict, session: AsyncSession = Depends(get_s
         filepath = f"{base}_{counter}{dot_ext}"
         counter += 1
 
-    with open(filepath, "wb") as f:
-        f.write(resp.content)
+    async with aiofiles.open(filepath, "wb") as f:
+        await f.write(resp.content)
 
     actual_filename = os.path.basename(filepath)
     file_id = hashlib.md5(f"{user_id}_{actual_filename}_{url}".encode()).hexdigest()[:16]
@@ -167,15 +192,18 @@ async def download_resource(request: dict, session: AsyncSession = Depends(get_s
 
 
 @router.post("/generate-from-url")
-async def generate_from_url(request: dict, session: AsyncSession = Depends(get_session)):
-    url = request.get("url")
-    subject = request.get("subject", "数学")
-    question_type = request.get("question_type", "single_choice")
-    count = min(request.get("count", 5), 10)
-    user_id = request.get("user_id")
+async def generate_from_url(request: ResourceGenerate, http_request: Request, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
+    url = request.url
+    subject = request.subject
+    question_type = request.question_type
+    count = min(request.count, 10)
+    user_id = current_user.id
 
     if not url:
         return {"error": "url is required"}
+
+    if not is_safe_url(url):
+        raise HTTPException(status_code=400, detail="不安全的 URL")
 
     try:
         async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:

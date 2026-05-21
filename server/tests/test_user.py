@@ -32,7 +32,10 @@ async def test_register_and_login(client):
         "password": "secret123",
     })
     assert resp.status_code == 200
-    assert resp.json()["username"] == "logintest"
+    data = resp.json()
+    assert data["username"] == "logintest"
+    assert "token" in data
+    assert "user_id" in data
 
     login_resp = await client.post("/api/user/login", json={
         "username": "logintest",
@@ -40,6 +43,7 @@ async def test_register_and_login(client):
     })
     assert login_resp.status_code == 200
     assert login_resp.json()["username"] == "logintest"
+    assert "token" in login_resp.json()
 
 
 @pytest.mark.asyncio
@@ -52,4 +56,10 @@ async def test_login_wrong_password(client):
         "username": "wrongpw",
         "password": "incorrect",
     })
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_unauthenticated_access(client):
+    resp = await client.get("/api/quiz/questions")
     assert resp.status_code == 401

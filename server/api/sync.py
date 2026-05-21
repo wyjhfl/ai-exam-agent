@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from db.database import get_session
-from db.models import QuizRecord, WrongQuestion, StudyPlan, StudySession
+from db.models import QuizRecord, WrongQuestion, StudyPlan, StudySession, User
+from core.auth import get_current_user
 from models.schemas import SyncUploadRequest, SyncDownloadRequest, SyncFullRequest
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ def _serialize_record(record, data_type: str) -> dict:
 
 
 @router.post("/upload")
-async def upload_data(request: SyncUploadRequest, session: AsyncSession = Depends(get_session)):
+async def upload_data(request: SyncUploadRequest, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
     model = DATA_MODELS.get(request.data_type)
     if not model:
         raise HTTPException(status_code=400, detail=f"Unsupported data_type: {request.data_type}")
@@ -53,7 +54,7 @@ async def upload_data(request: SyncUploadRequest, session: AsyncSession = Depend
 
 
 @router.post("/download")
-async def download_data(request: SyncDownloadRequest, session: AsyncSession = Depends(get_session)):
+async def download_data(request: SyncDownloadRequest, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
     types_to_fetch = list(DATA_MODELS.keys()) if request.data_type == "all" else [request.data_type]
     result = {}
 
@@ -61,7 +62,7 @@ async def download_data(request: SyncDownloadRequest, session: AsyncSession = De
         model = DATA_MODELS.get(dt)
         if not model:
             continue
-        rows = await session.execute(select(model).where(model.user_id == request.user_id))
+        rows = await session.execute(select(model).where(model.user_id == current_user.id))
         records = rows.scalars().all()
         result[dt] = [_serialize_record(r, dt) for r in records]
 
@@ -69,7 +70,7 @@ async def download_data(request: SyncDownloadRequest, session: AsyncSession = De
 
 
 @router.post("/full")
-async def full_sync(request: SyncFullRequest, session: AsyncSession = Depends(get_session)):
+async def full_sync(request: SyncFullRequest, session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
     for dt, items in request.local_data.items():
         model = DATA_MODELS.get(dt)
         if not model:
@@ -99,24 +100,24 @@ async def full_sync(request: SyncFullRequest, session: AsyncSession = Depends(ge
 
     result = {}
     for dt, model in DATA_MODELS.items():
-        rows = await session.execute(select(model).where(model.user_id == request.user_id))
+        rows = await session.execute(select(model).where(model.user_id == current_user.id))
         records = rows.scalars().all()
         result[dt] = [_serialize_record(r, dt) for r in records]
 
     return {"status": "ok", "data": result}
 
 
-@router.get("/status/{user_id}")
-async def sync_status(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.get("/status")
+async def sync_status(session: AsyncSession = Depends(get_session), current_user: User = Depends(get_current_user)):
     counts = {}
     for dt, model in DATA_MODELS.items():
         count_result = await session.execute(
-            select(func.count()).select_from(model).where(model.user_id == user_id)
+            select(func.count()).select_from(model).where(model.user_id == current_user.id)
         )
         counts[dt] = count_result.scalar() or 0
 
     return {
-        "user_id": user_id,
+        "user_id": current_user.id,
         "last_sync_time": datetime.now().isoformat(),
         "counts": counts,
     }

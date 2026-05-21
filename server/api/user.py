@@ -1,11 +1,14 @@
 import hashlib
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from db.database import get_session
 from db.models import User
-from models.schemas import UserCreate, UserInfo, UserLogin, UserRegister
+from models.schemas import UserCreate, UserInfo, UserLogin, UserRegister, TokenResponse
+from core.auth import get_password_hash, verify_password, create_access_token
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -15,12 +18,13 @@ async def register(request: UserRegister, session: AsyncSession = Depends(get_se
     existing = result.scalar_one_or_none()
     if existing:
         raise HTTPException(status_code=400, detail="用户名已存在")
-    password_hash = hashlib.sha256(request.password.encode()).hexdigest()
+    password_hash = get_password_hash(request.password)
     user = User(username=request.username, password_hash=password_hash)
     session.add(user)
     await session.commit()
     await session.refresh(user)
-    return {"user_id": user.id, "username": user.username}
+    token = create_access_token(user.id)
+    return TokenResponse(user_id=user.id, username=user.username, token=token)
 
 
 @router.post("/login")
@@ -31,13 +35,22 @@ async def login(request: UserLogin, session: AsyncSession = Depends(get_session)
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     if not user.password_hash:
         raise HTTPException(status_code=401, detail="该用户未设置密码，请先注册")
-    password_hash = hashlib.sha256(request.password.encode()).hexdigest()
-    if password_hash != user.password_hash:
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
-    return {"user_id": user.id, "username": user.username}
+
+    if len(user.password_hash) == 64:
+        if hashlib.sha256(request.password.encode()).hexdigest() != user.password_hash:
+            raise HTTPException(status_code=401, detail="用户名或密码错误")
+        user.password_hash = get_password_hash(request.password)
+        await session.commit()
+        logger.info("Migrated user %s password from SHA-256 to bcrypt", user.id)
+    else:
+        if not verify_password(request.password, user.password_hash):
+            raise HTTPException(status_code=401, detail="用户名或密码错误")
+
+    token = create_access_token(user.id)
+    return TokenResponse(user_id=user.id, username=user.username, token=token)
 
 
-@router.post("/create", response_model=UserInfo)
+@router.post("/create", response_model=UserInfo, deprecated=True)
 async def create_user(request: UserCreate, session: AsyncSession = Depends(get_session)):
     user = User(username=request.username)
     session.add(user)

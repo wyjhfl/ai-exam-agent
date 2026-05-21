@@ -6,30 +6,31 @@ from sqlalchemy import select, func, case
 from db.database import get_session
 from db.models import QuizRecord, WrongQuestion, StudySession, QuizQuestion, User
 from core.llm import chat_completion_sync, chat_completion_for_user, is_configured
+from core.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/{user_id}/overview")
-async def get_overview(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.get("/overview")
+async def get_overview(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     total_study = await session.execute(
-        select(func.coalesce(func.sum(StudySession.duration), 0)).where(StudySession.user_id == user_id)
+        select(func.coalesce(func.sum(StudySession.duration), 0)).where(StudySession.user_id == current_user.id)
     )
     total_study_minutes = total_study.scalar() or 0
 
     total_quiz = await session.execute(
-        select(func.count()).where(QuizRecord.user_id == user_id)
+        select(func.count()).where(QuizRecord.user_id == current_user.id)
     )
     total_quiz_count = total_quiz.scalar() or 0
 
     correct_count = await session.execute(
-        select(func.count()).where(QuizRecord.user_id == user_id, QuizRecord.is_correct == True)
+        select(func.count()).where(QuizRecord.user_id == current_user.id, QuizRecord.is_correct == True)
     )
     correct = correct_count.scalar() or 0
 
     wrong_count = await session.execute(
-        select(func.count()).where(WrongQuestion.user_id == user_id, WrongQuestion.mastered == False)
+        select(func.count()).where(WrongQuestion.user_id == current_user.id, WrongQuestion.mastered == False)
     )
     wrong = wrong_count.scalar() or 0
 
@@ -43,8 +44,8 @@ async def get_overview(user_id: int, session: AsyncSession = Depends(get_session
     }
 
 
-@router.get("/{user_id}/subject-stats")
-async def get_subject_stats(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.get("/subject-stats")
+async def get_subject_stats(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     result = await session.execute(
         select(
             QuizQuestion.subject,
@@ -52,7 +53,7 @@ async def get_subject_stats(user_id: int, session: AsyncSession = Depends(get_se
             func.sum(case((QuizRecord.is_correct == True, 1), else_=0)).label("correct"),
         )
         .join(QuizQuestion, QuizRecord.question_id == QuizQuestion.id)
-        .where(QuizRecord.user_id == user_id)
+        .where(QuizRecord.user_id == current_user.id)
         .group_by(QuizQuestion.subject)
     )
     rows = result.all()
@@ -69,8 +70,8 @@ async def get_subject_stats(user_id: int, session: AsyncSession = Depends(get_se
     return stats
 
 
-@router.get("/{user_id}/weak-points")
-async def get_weak_points(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.get("/weak-points")
+async def get_weak_points(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     result = await session.execute(
         select(
             QuizQuestion.topic,
@@ -79,7 +80,7 @@ async def get_weak_points(user_id: int, session: AsyncSession = Depends(get_sess
             func.sum(case((QuizRecord.is_correct == True, 1), else_=0)).label("correct"),
         )
         .join(QuizQuestion, QuizRecord.question_id == QuizQuestion.id)
-        .where(QuizRecord.user_id == user_id, QuizQuestion.topic != None, QuizQuestion.topic != "")
+        .where(QuizRecord.user_id == current_user.id, QuizQuestion.topic != None, QuizQuestion.topic != "")
         .group_by(QuizQuestion.topic, QuizQuestion.subject)
     )
     rows = result.all()
@@ -99,8 +100,8 @@ async def get_weak_points(user_id: int, session: AsyncSession = Depends(get_sess
     return points[:5]
 
 
-@router.get("/{user_id}/trend")
-async def get_trend(user_id: int, days: int = 7, session: AsyncSession = Depends(get_session)):
+@router.get("/trend")
+async def get_trend(days: int = 7, current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     trend = []
     for i in range(days - 1, -1, -1):
         date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
@@ -108,7 +109,7 @@ async def get_trend(user_id: int, days: int = 7, session: AsyncSession = Depends
 
         day_total = await session.execute(
             select(func.count()).where(
-                QuizRecord.user_id == user_id,
+                QuizRecord.user_id == current_user.id,
                 QuizRecord.created_at >= date,
                 QuizRecord.created_at < next_date,
             )
@@ -117,7 +118,7 @@ async def get_trend(user_id: int, days: int = 7, session: AsyncSession = Depends
 
         day_correct = await session.execute(
             select(func.count()).where(
-                QuizRecord.user_id == user_id,
+                QuizRecord.user_id == current_user.id,
                 QuizRecord.is_correct == True,
                 QuizRecord.created_at >= date,
                 QuizRecord.created_at < next_date,
@@ -134,8 +135,8 @@ async def get_trend(user_id: int, days: int = 7, session: AsyncSession = Depends
     return trend
 
 
-@router.get("/{user_id}/weekly-report")
-async def get_weekly_report(user_id: int, session: AsyncSession = Depends(get_session)):
+@router.get("/weekly-report")
+async def get_weekly_report(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     now = datetime.now()
     week_ago = now - timedelta(days=7)
     period_start = week_ago.strftime("%Y-%m-%d")
@@ -143,7 +144,7 @@ async def get_weekly_report(user_id: int, session: AsyncSession = Depends(get_se
 
     total_quiz_result = await session.execute(
         select(func.count()).where(
-            QuizRecord.user_id == user_id,
+            QuizRecord.user_id == current_user.id,
             QuizRecord.created_at >= week_ago,
         )
     )
@@ -151,7 +152,7 @@ async def get_weekly_report(user_id: int, session: AsyncSession = Depends(get_se
 
     correct_result = await session.execute(
         select(func.count()).where(
-            QuizRecord.user_id == user_id,
+            QuizRecord.user_id == current_user.id,
             QuizRecord.is_correct == True,
             QuizRecord.created_at >= week_ago,
         )
@@ -166,7 +167,7 @@ async def get_weekly_report(user_id: int, session: AsyncSession = Depends(get_se
             func.sum(case((QuizRecord.is_correct == True, 1), else_=0)).label("correct"),
         )
         .join(QuizQuestion, QuizRecord.question_id == QuizQuestion.id)
-        .where(QuizRecord.user_id == user_id, QuizRecord.created_at >= week_ago)
+        .where(QuizRecord.user_id == current_user.id, QuizRecord.created_at >= week_ago)
         .group_by(QuizQuestion.subject)
     )
     subject_rows = subject_result.all()
@@ -187,7 +188,7 @@ async def get_weekly_report(user_id: int, session: AsyncSession = Depends(get_se
 
     study_result = await session.execute(
         select(func.coalesce(func.sum(StudySession.duration), 0)).where(
-            StudySession.user_id == user_id,
+            StudySession.user_id == current_user.id,
             StudySession.created_at >= week_ago,
         )
     )
@@ -196,7 +197,7 @@ async def get_weekly_report(user_id: int, session: AsyncSession = Depends(get_se
 
     new_wrong_result = await session.execute(
         select(func.count()).where(
-            WrongQuestion.user_id == user_id,
+            WrongQuestion.user_id == current_user.id,
             WrongQuestion.created_at >= week_ago,
         )
     )
@@ -204,7 +205,7 @@ async def get_weekly_report(user_id: int, session: AsyncSession = Depends(get_se
 
     mastered_result = await session.execute(
         select(func.count()).where(
-            WrongQuestion.user_id == user_id,
+            WrongQuestion.user_id == current_user.id,
             WrongQuestion.mastered == True,
             WrongQuestion.created_at >= week_ago,
         )
@@ -220,7 +221,7 @@ async def get_weekly_report(user_id: int, session: AsyncSession = Depends(get_se
         )
         .join(QuizQuestion, QuizRecord.question_id == QuizQuestion.id)
         .where(
-            QuizRecord.user_id == user_id,
+            QuizRecord.user_id == current_user.id,
             QuizRecord.created_at >= week_ago,
             QuizQuestion.topic != None,
             QuizQuestion.topic != "",
@@ -263,7 +264,7 @@ async def get_weekly_report(user_id: int, session: AsyncSession = Depends(get_se
 请严格按以下格式输出（每行一个字段，用|||分隔）：
 一句话总结|||建议1|||建议2|||建议3|||下周重点复习方向"""
         try:
-            llm_response = await chat_completion_for_user([{"role": "user", "content": prompt}], user_id, session)
+            llm_response = await chat_completion_for_user([{"role": "user", "content": prompt}], current_user.id, session)
             parts = llm_response.split("|||")
             if len(parts) >= 5:
                 summary = parts[0].strip()
