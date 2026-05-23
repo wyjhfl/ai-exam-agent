@@ -5,6 +5,8 @@ function getStoredToken(): string | null {
   return localStorage.getItem("ai_exam_token");
 }
 
+let isHandling401 = false;
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000",
   headers: { "Content-Type": "application/json" },
@@ -31,8 +33,12 @@ api.interceptors.response.use(
       localStorage.removeItem("ai_exam_user_id");
       localStorage.removeItem("ai_exam_username");
       if (!url?.includes("/api/user/login") && !url?.includes("/api/user/register")) {
-        toast.error("登录已过期，请重新登录");
-        window.location.href = "/login";
+        if (!isHandling401) {
+          isHandling401 = true;
+          toast.error("登录已过期，请重新登录");
+          setTimeout(() => { isHandling401 = false; }, 3000);
+          window.location.href = "/login";
+        }
       }
       return Promise.reject(error);
     }
@@ -280,7 +286,7 @@ export function getExportUrl(type: "wrong-questions" | "study-summary", format: 
   return `${baseURL}/api/export/${type}${authParam}`;
 }
 
-export const APP_VERSION = "0.7.0";
+export const APP_VERSION = "0.8.0";
 
 export async function uploadFile(subject: string, fileType: string, file: File, onProgress?: (pct: number) => void) {
   const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -565,10 +571,12 @@ export async function fetchReminders() {
   return data;
 }
 
-export async function fetchExamPapers(subject?: string, year?: number) {
+export async function fetchExamPapers(subject?: string, year?: number, page?: number, pageSize?: number) {
   const params: Record<string, string> = {};
   if (subject && subject !== "全部") params.subject = subject;
   if (year) params.year = String(year);
+  if (page) params.page = String(page);
+  if (pageSize) params.page_size = String(pageSize);
   const { data } = await api.get("/api/exam-papers", { params });
   return data;
 }
@@ -578,12 +586,12 @@ export async function fetchExamPaperDetail(paperId: number) {
   return data;
 }
 
-export async function startExam(paperId: number) {
+export async function startExamPaper(paperId: number) {
   const { data } = await api.post(`/api/exam-papers/${paperId}/start`);
   return data;
 }
 
-export async function submitExam(paperId: number, answers: { question_id: number; selected_answer: string }[], durationSeconds: number) {
+export async function submitExamPaper(paperId: number, answers: { question_id: number; selected_answer: string }[], durationSeconds: number) {
   const { data } = await api.post(`/api/exam-papers/${paperId}/submit`, { answers, duration_seconds: durationSeconds });
   return data;
 }

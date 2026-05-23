@@ -6,6 +6,7 @@ import { useSyncStore } from "@/stores/syncStore";
 import { APP_VERSION, checkForUpdate, fetchReminders } from "@/services/api";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
+import UpdateDialog from "@/components/UpdateDialog";
 
 const navItems = [
   { to: "/", icon: Home, label: "首页" },
@@ -29,6 +30,9 @@ function Sidebar({ onOpenSearch }: { onOpenSearch: () => void }) {
   const { lastSyncTime, isSyncing, syncNow } = useSyncStore();
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [dueCount, setDueCount] = useState(0);
+  const [updateDialog, setUpdateDialog] = useState<{ open: boolean; latestVersion: string; currentVersion: string; releaseNotes: string; downloadUrl: string }>({
+    open: false, latestVersion: "", currentVersion: "", releaseNotes: "", downloadUrl: "",
+  });
 
   useEffect(() => {
     if (userId) {
@@ -57,25 +61,13 @@ function Sidebar({ onOpenSearch }: { onOpenSearch: () => void }) {
     try {
       const result = await checkForUpdate();
       if (result.hasUpdate) {
-        toast.info(
-          <div>
-            <p className="font-medium">发现新版本 v{result.latestVersion}</p>
-            {result.releaseNotes && (
-              <p className="text-xs text-muted-foreground mt-1">{result.releaseNotes}</p>
-            )}
-            {result.downloadUrl && (
-              <a
-                href={result.downloadUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-primary underline mt-1 inline-block"
-              >
-                前往下载 →
-              </a>
-            )}
-          </div>,
-          { duration: 10000 }
-        );
+        setUpdateDialog({
+          open: true,
+          latestVersion: result.latestVersion,
+          currentVersion: result.currentVersion,
+          releaseNotes: result.releaseNotes,
+          downloadUrl: result.downloadUrl,
+        });
       } else {
         toast.success(result.message);
       }
@@ -92,6 +84,7 @@ function Sidebar({ onOpenSearch }: { onOpenSearch: () => void }) {
   ];
 
   return (
+    <>
     <aside
       className={`flex flex-col border-r border-border bg-card transition-all duration-200 ${
         sidebarCollapsed ? "w-14" : "w-48"
@@ -210,6 +203,15 @@ function Sidebar({ onOpenSearch }: { onOpenSearch: () => void }) {
         </div>
       </div>
     </aside>
+    <UpdateDialog
+      open={updateDialog.open}
+      onClose={() => setUpdateDialog((p) => ({ ...p, open: false }))}
+      currentVersion={updateDialog.currentVersion}
+      latestVersion={updateDialog.latestVersion}
+      releaseNotes={updateDialog.releaseNotes}
+      downloadUrl={updateDialog.downloadUrl}
+    />
+    </>
   );
 }
 

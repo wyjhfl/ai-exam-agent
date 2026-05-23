@@ -1,5 +1,5 @@
 import { HashRouter, Routes, Route } from "react-router-dom";
-import { Toaster, toast } from "sonner";
+import { Toaster } from "sonner";
 import { useEffect, lazy, Suspense, useState, useCallback } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import SearchModal from "@/components/SearchModal";
@@ -8,6 +8,7 @@ import { useUserStore } from "@/stores/userStore";
 import { useChatStore } from "@/stores/chatStore";
 import LoginForm from "@/components/LoginForm";
 import { checkForUpdate } from "@/services/api";
+import UpdateDialog from "@/components/UpdateDialog";
 
 const HomePage = lazy(() => import("@/pages/HomePage"));
 const ChatPage = lazy(() => import("@/pages/ChatPage"));
@@ -43,7 +44,7 @@ function BackendLoadingScreen() {
   );
 }
 
-function BackendErrorScreen({ onRetry, errorInfo, retrying }: { onRetry: () => void; errorInfo?: string; retrying: boolean }) {
+function BackendErrorScreen({ onRetry, onRestart, errorInfo, retrying, isTauri }: { onRetry: () => void; onRestart: () => void; errorInfo?: string; retrying: boolean; isTauri: boolean }) {
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-4 max-w-md text-center px-4">
@@ -55,15 +56,26 @@ function BackendErrorScreen({ onRetry, errorInfo, retrying }: { onRetry: () => v
           </p>
         )}
         <p className="text-sm text-muted-foreground">
-          请尝试点击下方按钮重新启动，或关闭应用后重新打开
+          请尝试重启后端服务或重新打开应用
         </p>
-        <button
-          onClick={onRetry}
-          disabled={retrying}
-          className="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {retrying ? "正在重启..." : "重新启动后端"}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onRetry}
+            disabled={retrying}
+            className="px-6 py-2 border border-border rounded-md hover:bg-accent disabled:opacity-50 transition-colors text-sm"
+          >
+            {retrying ? "连接中..." : "重试连接"}
+          </button>
+          {isTauri && (
+            <button
+              onClick={onRestart}
+              disabled={retrying}
+              className="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors text-sm"
+            >
+              {retrying ? "重启中..." : "重启后端"}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -101,10 +113,19 @@ function App() {
   const userId = useUserStore((s) => s.userId);
   const { setUserId } = useChatStore();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [updateDialog, setUpdateDialog] = useState<{ open: boolean; latestVersion: string; currentVersion: string; releaseNotes: string; downloadUrl: string }>({
+    open: false, latestVersion: "", currentVersion: "", releaseNotes: "", downloadUrl: "",
+  });
   const [backendReady, setBackendReady] = useState(false);
   const [backendFailed, setBackendFailed] = useState(false);
   const [backendError, setBackendError] = useState("");
   const [retrying, setRetrying] = useState(false);
+
+  const [isTauri, setIsTauri] = useState(false);
+
+  useEffect(() => {
+    import("@tauri-apps/api/core").then(() => setIsTauri(true)).catch(() => setIsTauri(false));
+  }, []);
 
   const checkBackend = useCallback(async () => {
     const ok = await waitForBackend(60, 1000);
@@ -121,7 +142,19 @@ function App() {
     }
   }, []);
 
-  const handleRetry = useCallback(async () => {
+  const handleRetryConnect = useCallback(async () => {
+    setRetrying(true);
+    const ok = await waitForBackend(10, 1000);
+    if (ok) {
+      setBackendReady(true);
+      setBackendFailed(false);
+    } else {
+      setBackendFailed(true);
+    }
+    setRetrying(false);
+  }, []);
+
+  const handleRestartBackend = useCallback(async () => {
     setRetrying(true);
     setBackendFailed(false);
     setBackendError("");
@@ -164,25 +197,13 @@ function App() {
     if (isLoggedIn) {
       checkForUpdate().then((result) => {
         if (result.hasUpdate) {
-          toast.info(
-            <div>
-              <p className="font-medium">发现新版本 v{result.latestVersion}</p>
-              {result.releaseNotes && (
-                <p className="text-xs text-muted-foreground mt-1">{result.releaseNotes}</p>
-              )}
-              {result.downloadUrl && (
-                <a
-                  href={result.downloadUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-primary underline mt-1 inline-block"
-                >
-                  前往下载 →
-                </a>
-              )}
-            </div>,
-            { duration: 10000 }
-          );
+          setUpdateDialog({
+            open: true,
+            latestVersion: result.latestVersion,
+            currentVersion: result.currentVersion,
+            releaseNotes: result.releaseNotes,
+            downloadUrl: result.downloadUrl,
+          });
         }
       }).catch(() => {});
     }
@@ -200,7 +221,7 @@ function App() {
   }, []);
 
   if (backendFailed) {
-    return <BackendErrorScreen onRetry={handleRetry} errorInfo={backendError} retrying={retrying} />;
+    return <BackendErrorScreen onRetry={handleRetryConnect} onRestart={handleRestartBackend} errorInfo={backendError} retrying={retrying} isTauri={isTauri} />;
   }
 
   if (!backendReady) {
@@ -240,6 +261,14 @@ function App() {
         )}
       </div>
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <UpdateDialog
+        open={updateDialog.open}
+        onClose={() => setUpdateDialog((p) => ({ ...p, open: false }))}
+        currentVersion={updateDialog.currentVersion}
+        latestVersion={updateDialog.latestVersion}
+        releaseNotes={updateDialog.releaseNotes}
+        downloadUrl={updateDialog.downloadUrl}
+      />
       <Toaster richColors position="top-right" />
     </HashRouter>
   );

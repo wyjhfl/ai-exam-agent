@@ -316,11 +316,12 @@ async def submit_exam(
             "question_order": question.question_order,
             "section_name": question.section_name,
             "question_type": qt,
+            "question_text": question.question_text,
             "selected_answer": selected,
             "correct_answer": question.answer,
             "is_correct": is_correct,
-            "score": q_score,
-            "earned_score": earned,
+            "score": earned,
+            "max_score": q_score,
             "explanation": question.explanation,
         })
 

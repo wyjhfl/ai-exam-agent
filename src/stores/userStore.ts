@@ -10,6 +10,13 @@ interface UserState {
   register: (username: string, password: string) => Promise<void>;
   logout: () => void;
   restoreSession: () => void;
+  clearSession: () => void;
+}
+
+function clearStorage() {
+  localStorage.removeItem("ai_exam_user_id");
+  localStorage.removeItem("ai_exam_username");
+  localStorage.removeItem("ai_exam_token");
 }
 
 export const useUserStore = create<UserState>((set) => ({
@@ -38,17 +45,20 @@ export const useUserStore = create<UserState>((set) => ({
   },
 
   logout: () => {
-    localStorage.removeItem("ai_exam_user_id");
-    localStorage.removeItem("ai_exam_username");
-    localStorage.removeItem("ai_exam_token");
+    clearStorage();
+    set({ userId: null, username: "", token: null, isLoggedIn: false });
+  },
+
+  clearSession: () => {
+    clearStorage();
     set({ userId: null, username: "", token: null, isLoggedIn: false });
   },
 
   restoreSession: () => {
+    const storedToken = localStorage.getItem("ai_exam_token");
     const storedId = localStorage.getItem("ai_exam_user_id");
     const storedName = localStorage.getItem("ai_exam_username");
-    const storedToken = localStorage.getItem("ai_exam_token");
-    if (storedId && storedName && storedToken) {
+    if (storedToken && storedId && storedName) {
       set({ userId: Number(storedId), username: storedName, token: storedToken, isLoggedIn: true });
     }
   },

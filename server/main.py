@@ -53,7 +53,7 @@ def _check_rate_limit(path: str, client_ip: str) -> str | None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
-    logger.info("Starting AI Exam Agent server v0.7.0")
+    logger.info("Starting AI Exam Agent server v0.8.0")
     logger.info("Python executable: %s", sys.executable)
     logger.info("Frozen: %s", getattr(sys, "frozen", False))
     if getattr(sys, "frozen", False):
@@ -150,7 +150,7 @@ app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
 @app.get("/api/health")
 async def health_check():
-    checks = {"status": "ok", "version": "0.7.0"}
+    checks = {"status": "ok", "version": "0.8.0"}
     try:
         async with async_session() as session:
             await session.execute(text("SELECT 1"))

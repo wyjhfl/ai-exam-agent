@@ -1,9 +1,23 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Clock, Target, TrendingUp, AlertCircle, Download, Zap, ClipboardList } from "lucide-react";
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  Cell,
+} from "recharts";
 import { fetchAnalysisOverview, fetchSubjectStats, fetchTrend, getExportUrl, fetchWeakPoints } from "@/services/api";
 import { useUserStore } from "@/stores/userStore";
+import { toast } from "sonner";
+import EmptyState from "@/components/EmptyState";
+import PageLoader from "@/components/PageLoader";
 
 interface Overview {
   total_study_minutes: number;
@@ -19,7 +33,7 @@ interface SubjectStat {
   accuracy: number;
 }
 
-interface TrendDay {
+interface TrendPoint {
   date: string;
   total: number;
   correct: number;
@@ -34,15 +48,67 @@ interface WeakPoint {
   accuracy: number;
 }
 
+const SUBJECT_BAR_COLORS: Record<string, string> = {
+  数学: "#3b82f6",
+  英语: "#22c55e",
+  政治: "#f97316",
+};
+
+function getAccuracyColor(acc: number) {
+  if (acc < 40) return "#ef4444";
+  if (acc < 70) return "#f59e0b";
+  return "#22c55e";
+}
+
+function CustomTrendTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload as TrendPoint;
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-lg">
+      <p className="font-medium">{d.date}</p>
+      <p className="text-muted-foreground">刷题数：{d.total}</p>
+      <p className="text-muted-foreground">正确数：{d.correct}</p>
+      <p className="text-primary font-medium">正确率：{d.accuracy}%</p>
+    </div>
+  );
+}
+
+function CustomSubjectTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload as SubjectStat;
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-lg">
+      <p className="font-medium">{d.subject}</p>
+      <p className="text-muted-foreground">总题数：{d.total}</p>
+      <p className="text-muted-foreground">正确数：{d.correct}</p>
+      <p className="text-primary font-medium">正确率：{d.accuracy}%</p>
+    </div>
+  );
+}
+
+function CustomAccuracyTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload as SubjectStat;
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-lg">
+      <p className="font-medium">{d.subject}</p>
+      <p className="font-medium" style={{ color: getAccuracyColor(d.accuracy) }}>
+        正确率：{d.accuracy}%
+      </p>
+    </div>
+  );
+}
+
 function AnalysisPage() {
   const { userId } = useUserStore();
   const navigate = useNavigate();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [subjectStats, setSubjectStats] = useState<SubjectStat[]>([]);
-  const [trend, setTrend] = useState<TrendDay[]>([]);
-  const [trend60, setTrend60] = useState<TrendDay[]>([]);
+  const [trend, setTrend] = useState<TrendPoint[]>([]);
+  const [trend60, setTrend60] = useState<TrendPoint[]>([]);
   const [weakPoints, setWeakPoints] = useState<WeakPoint[]>([]);
   const [showExport, setShowExport] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (userId) loadData();
@@ -50,6 +116,7 @@ function AnalysisPage() {
 
   const loadData = async () => {
     if (!userId) return;
+    setLoading(true);
     try {
       const [ov, ss, tr, wp, tr60] = await Promise.all([
         fetchAnalysisOverview(),
@@ -59,13 +126,14 @@ function AnalysisPage() {
         fetchTrend(60),
       ]);
       setOverview(ov);
-      setSubjectStats(ss);
-      setTrend(tr);
-      setWeakPoints(wp);
-      setTrend60(tr60);
+      setSubjectStats(Array.isArray(ss) ? ss : ss.items || []);
+      setTrend(Array.isArray(tr) ? tr : tr.items || []);
+      setWeakPoints(Array.isArray(wp) ? wp : wp.items || []);
+      setTrend60(Array.isArray(tr60) ? tr60 : tr60.items || []);
     } catch {
-      // load failed
+      toast.error("加载分析数据失败");
     }
+    setLoading(false);
   };
 
   const handleExport = (type: "wrong-questions" | "study-summary") => {
@@ -75,8 +143,11 @@ function AnalysisPage() {
     setShowExport(false);
   };
 
+  if (loading) {
+    return <PageLoader />;
+  }
+
   const hasData = overview && overview.total_quiz_count > 0;
-  const maxQuizInTrend = Math.max(...trend.map((t) => t.total), 1);
 
   return (
     <div className="p-4 md:p-6 space-y-6 overflow-y-auto h-full">
@@ -91,62 +162,46 @@ function AnalysisPage() {
             查看周报
           </button>
           <div className="relative">
-          <button
-            onClick={() => setShowExport(!showExport)}
-            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent transition-colors"
-          >
-            <Download className="h-4 w-4" />
-            导出数据
-          </button>
-          {showExport && (
-            <div className="absolute right-0 mt-1 w-48 rounded-md border border-border bg-card shadow-lg z-10">
-              <button
-                onClick={() => handleExport("wrong-questions")}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
-              >
-                导出错题本(Excel)
-              </button>
-              <button
-                onClick={() => handleExport("study-summary")}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
-              >
-                导出学习总结(Excel)
-              </button>
-            </div>
-          )}
-        </div>
+            <button
+              onClick={() => setShowExport(!showExport)}
+              className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              导出数据
+            </button>
+            {showExport && (
+              <div className="absolute right-0 mt-1 w-48 rounded-md border border-border bg-card shadow-lg z-10">
+                <button
+                  onClick={() => handleExport("wrong-questions")}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
+                >
+                  导出错题本(Excel)
+                </button>
+                <button
+                  onClick={() => handleExport("study-summary")}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
+                >
+                  导出学习总结(Excel)
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {!hasData ? (
-        <div className="flex flex-col items-center justify-center py-20 space-y-3">
-          <AlertCircle className="h-12 w-12 text-muted-foreground" />
-          <p className="text-muted-foreground">暂无学习数据</p>
-          <p className="text-sm text-muted-foreground">去刷几道题再来查看分析</p>
-        </div>
+        <EmptyState
+          icon={AlertCircle}
+          title="暂无学习数据"
+          description="去刷几道题再来查看分析"
+        />
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard
-              icon={<Clock className="h-5 w-5" />}
-              label="总学习时长"
-              value={`${Math.round((overview.total_study_minutes || 0) / 60)}h`}
-            />
-            <StatCard
-              icon={<Target className="h-5 w-5" />}
-              label="总刷题数"
-              value={String(overview.total_quiz_count)}
-            />
-            <StatCard
-              icon={<TrendingUp className="h-5 w-5" />}
-              label="正确率"
-              value={`${overview.accuracy}%`}
-            />
-            <StatCard
-              icon={<AlertCircle className="h-5 w-5" />}
-              label="待复习错题"
-              value={String(overview.wrong_count)}
-            />
+            <StatCard icon={<Clock className="h-5 w-5" />} label="总学习时长" value={`${Math.round((overview.total_study_minutes || 0) / 60)}h`} />
+            <StatCard icon={<Target className="h-5 w-5" />} label="总刷题数" value={String(overview.total_quiz_count)} />
+            <StatCard icon={<TrendingUp className="h-5 w-5" />} label="正确率" value={`${overview.accuracy}%`} />
+            <StatCard icon={<AlertCircle className="h-5 w-5" />} label="待复习错题" value={String(overview.wrong_count)} />
           </div>
 
           <div className="rounded-lg border border-border p-4 space-y-3">
@@ -216,92 +271,128 @@ function AnalysisPage() {
             </div>
           )}
 
-          <div className="rounded-lg border border-border p-4 space-y-3">
-            <h3 className="font-semibold text-sm">最近 7 天学习趋势</h3>
-            <div className="flex items-end gap-2 h-32">
-              {trend.map((d) => {
-                const heightPct = (d.total / maxQuizInTrend) * 100;
-                return (
-                  <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
-                    <span className="text-xs text-muted-foreground">{d.total}</span>
-                    <div className="w-full relative" style={{ height: "100px" }}>
-                      <div
-                        className="absolute bottom-0 w-full rounded-t bg-primary/80 transition-all"
-                        style={{ height: `${Math.max(heightPct, 4)}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-muted-foreground">{d.date.slice(5)}</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-lg border border-border p-4 space-y-3">
+              <h3 className="font-semibold text-sm">近 30 天正确率趋势</h3>
+              {trend.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">暂无趋势数据</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={240}>
+                  <LineChart data={trend}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis
+                      dataKey="date"
+                      tickFormatter={(v: string) => v.slice(5)}
+                      stroke="var(--muted-foreground)"
+                      fontSize={11}
+                    />
+                    <YAxis
+                      domain={[0, 100]}
+                      stroke="var(--muted-foreground)"
+                      fontSize={11}
+                      tickFormatter={(v: number) => `${v}%`}
+                    />
+                    <Tooltip content={<CustomTrendTooltip />} />
+                    <Line
+                      type="monotone"
+                      dataKey="accuracy"
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={2}
+                      dot={{ r: 2 }}
+                      activeDot={{ r: 4 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-border p-4 space-y-3">
+              <h3 className="font-semibold text-sm">各科刷题量对比</h3>
+              {subjectStats.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">暂无数据</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={subjectStats}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="subject" stroke="var(--muted-foreground)" fontSize={11} />
+                    <YAxis stroke="var(--muted-foreground)" fontSize={11} />
+                    <Tooltip content={<CustomSubjectTooltip />} />
+                    <Bar dataKey="total" radius={[4, 4, 0, 0]} name="刷题量">
+                      {subjectStats.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={SUBJECT_BAR_COLORS[entry.subject] || "hsl(var(--primary))"}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-border p-4 space-y-3">
+              <h3 className="font-semibold text-sm">各科正确率对比</h3>
+              {subjectStats.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">暂无数据</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={subjectStats}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="subject" stroke="var(--muted-foreground)" fontSize={11} />
+                    <YAxis
+                      domain={[0, 100]}
+                      stroke="var(--muted-foreground)"
+                      fontSize={11}
+                      tickFormatter={(v: number) => `${v}%`}
+                    />
+                    <Tooltip content={<CustomAccuracyTooltip />} />
+                    <Bar dataKey="accuracy" radius={[4, 4, 0, 0]} name="正确率">
+                      {subjectStats.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={getAccuracyColor(entry.accuracy)}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-border p-4 space-y-3">
+              <h3 className="font-semibold text-sm">学习活跃度</h3>
+              {trend60.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">暂无数据</p>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-1">
+                    {trend60.map((d) => {
+                      const level = d.total === 0 ? 0 : d.total <= 5 ? 1 : d.total <= 15 ? 2 : 3;
+                      const colors = [
+                        "bg-muted",
+                        "bg-green-200 dark:bg-green-900/40",
+                        "bg-green-400 dark:bg-green-700",
+                        "bg-green-600 dark:bg-green-500",
+                      ];
+                      return (
+                        <div
+                          key={d.date}
+                          className={`w-3 h-3 rounded-sm ${colors[level]}`}
+                          title={`${d.date}: ${d.total} 题, 正确率 ${d.accuracy}%`}
+                        />
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-border p-4 space-y-3">
-            <h3 className="font-semibold text-sm">近 30 天正确率趋势</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={trend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="date" tickFormatter={(v: string) => v.slice(5)} stroke="var(--muted-foreground)" fontSize={12} />
-                <YAxis domain={[0, 100]} stroke="var(--muted-foreground)" fontSize={12} tickFormatter={(v: number) => `${v}%`} />
-                <Tooltip formatter={(value: any) => [`${value}%`, '正确率']} labelFormatter={(label: any) => `日期: ${label}`} />
-                <Line type="monotone" dataKey="accuracy" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="rounded-lg border border-border p-4 space-y-3">
-            <h3 className="font-semibold text-sm">各科刷题量对比</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={subjectStats}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="subject" stroke="var(--muted-foreground)" fontSize={12} />
-                <YAxis stroke="var(--muted-foreground)" fontSize={12} />
-                <Tooltip />
-                <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="刷题量" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="rounded-lg border border-border p-4 space-y-3">
-            <h3 className="font-semibold text-sm">各科正确率对比</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={subjectStats}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="subject" stroke="var(--muted-foreground)" fontSize={12} />
-                <YAxis domain={[0, 100]} stroke="var(--muted-foreground)" fontSize={12} tickFormatter={(v: number) => `${v}%`} />
-                <Tooltip formatter={(value: any) => [`${value}%`, '正确率']} />
-                <Bar dataKey="accuracy" radius={[4, 4, 0, 0]} name="正确率">
-                  {subjectStats.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.accuracy >= 70 ? '#22c55e' : entry.accuracy >= 40 ? '#f59e0b' : '#ef4444'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="rounded-lg border border-border p-4 space-y-3">
-            <h3 className="font-semibold text-sm">学习活跃度</h3>
-            <div className="flex flex-wrap gap-1">
-              {trend60.map((d) => {
-                const level = d.total === 0 ? 0 : d.total <= 5 ? 1 : d.total <= 15 ? 2 : 3;
-                const colors = ['bg-muted', 'bg-green-200 dark:bg-green-900', 'bg-green-400 dark:bg-green-700', 'bg-green-600 dark:bg-green-500'];
-                return (
-                  <div
-                    key={d.date}
-                    className={`w-3 h-3 rounded-sm ${colors[level]}`}
-                    title={`${d.date}: ${d.total} 题`}
-                  />
-                );
-              })}
-            </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
-              <span>少</span>
-              <div className="w-3 h-3 rounded-sm bg-muted" />
-              <div className="w-3 h-3 rounded-sm bg-green-200 dark:bg-green-900" />
-              <div className="w-3 h-3 rounded-sm bg-green-400 dark:bg-green-700" />
-              <div className="w-3 h-3 rounded-sm bg-green-600 dark:bg-green-500" />
-              <span>多</span>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
+                    <span>少</span>
+                    <div className="w-3 h-3 rounded-sm bg-muted" />
+                    <div className="w-3 h-3 rounded-sm bg-green-200 dark:bg-green-900/40" />
+                    <div className="w-3 h-3 rounded-sm bg-green-400 dark:bg-green-700" />
+                    <div className="w-3 h-3 rounded-sm bg-green-600 dark:bg-green-500" />
+                    <span>多</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </>
@@ -313,7 +404,10 @@ function AnalysisPage() {
 function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="rounded-lg border border-border p-4 space-y-2">
-      <div className="flex items-center gap-2 text-muted-foreground">{icon}<span className="text-xs">{label}</span></div>
+      <div className="flex items-center gap-2 text-muted-foreground">
+        {icon}
+        <span className="text-xs">{label}</span>
+      </div>
       <p className="text-2xl font-bold">{value}</p>
     </div>
   );

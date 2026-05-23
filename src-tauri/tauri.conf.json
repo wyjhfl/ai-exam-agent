@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "AI考研助手",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "identifier": "com.ai-exam-agent.app",
   "build": {
     "frontendDist": "../dist",
